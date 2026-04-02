@@ -1,0 +1,28 @@
+import axios from 'axios';
+
+// Por defecto Spring Boot corre en el puerto 8080.
+// Si tu backend corre en otro puerto, cámbialo aquí.
+const API_URL = 'http://localhost:8080'; 
+
+const api = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Interceptor: Antes de que salga la petición, le pegamos el Token JWT si existe
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+export default api;
