@@ -1,13 +1,8 @@
-// Archivo: src/types/personal.types.ts
-
 export interface UsuarioSlot {
-  id: number;
-  nombreCompleto: string; // En el backend este es el 'alias' (Ej: MESERO ALEJO)
-  login: string;          // Ej: M1_ALEJO
-  passwordHash: string;
-  rolUsuario: string;     // Ej: OPERATIVO
-  
-  // Estos los agregaremos al backend después, pero los preparamos en el front
-  bloqueado?: boolean; 
-  intentosFallidos?: number;
+  id?: number;
+  nombreCompleto: string; // El Backend lo devuelve como nombreCompleto, pero internamente es el Alias
+  login: string;
+  password?: string; // Lo usamos solo al crear/editar para mandar el PIN nuevo
+  rolUsuario?: string;
+  estado?: string; // 'ACTIVO' o 'INACTIVO' (o 'BLOQUEADO')
 }

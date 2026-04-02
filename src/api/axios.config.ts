@@ -1,7 +1,5 @@
 import axios from 'axios';
 
-// Por defecto Spring Boot corre en el puerto 8080.
-// Si tu backend corre en otro puerto, cámbialo aquí.
 const API_URL = 'http://localhost:8080'; 
 
 const api = axios.create({
@@ -15,9 +13,13 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
+    
+    // 💡 LA MAGIA ESTÁ AQUÍ: 
+    // Solo agregamos el token si existe Y la ruta NO es la de login
+    if (token && !config.url.includes('/auth/login')) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
     return config;
   },
   (error) => {
