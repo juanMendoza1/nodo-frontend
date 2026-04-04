@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { 
   LayoutDashboard, Package, Users, MonitorSmartphone, Settings, Bell, Search, 
   Menu, ArrowLeft, AlertTriangle, Store, Activity, RefreshCw, Clock, 
-  ArrowUpRight, ArrowDownRight, Wifi, WifiOff
+  ArrowUpRight, ArrowDownRight, Wifi, WifiOff, Gamepad2, UserCircle2, Timer,
+  X, Zap, Info, ShieldCheck
 } from 'lucide-react';
 
 import PersonalSlots from './PersonalSlots';
@@ -13,17 +14,41 @@ import Inventario from './Inventario';
 import Terminales from './Terminales';
 import { inventarioService } from '../../api/inventario.service';
 import type { DashboardStats, Movimiento } from '../../types/inventario.types';
+import MesaControlPanel from './components/MesaControlPanel';
 
 // ============================================================================
-// CUSTOM HOOK: LÓGICA DE WEBSOCKETS AISLADA
+// INTERFACES Y TIPOS
 // ============================================================================
-function useDashboardSocket(empresaId: number, onUpdateRequired: () => void) {
+export interface MesaDTO {
+  id: number;
+  idMesaLocal: number;
+  nombre: string;
+  estado: string; // "DISPONIBLE" | "ABIERTO" | "OCUPADA"
+  tipoJuego?: string;
+  tarifaTiempo?: number;
+  reglaDuelo?: string;
+  fechaApertura?: number;
+  usuarioActual?: { alias: string; login: string }; 
+}
+
+// ============================================================================
+// CUSTOM HOOK: WEBSOCKETS (ESTABILIZADO)
+// ============================================================================
+function useDashboardSocket(empresaId: number, onUpdateAudit: () => void, onUpdateMesa: (mesa: any) => void) {
   const [isLive, setIsLive] = useState(false);
+  
+  // Usamos Refs para evitar que los cambios en las funciones reinicien el socket
+  const auditRef = useRef(onUpdateAudit);
+  const mesaRef = useRef(onUpdateMesa);
+
+  useEffect(() => {
+    auditRef.current = onUpdateAudit;
+    mesaRef.current = onUpdateMesa;
+  }, [onUpdateAudit, onUpdateMesa]);
 
   useEffect(() => {
     if (!empresaId) return;
 
-    // IMPORTANTE: Cambia esta URL a la ruta de tu backend
     const socketUrl = 'http://localhost:8080/ws'; 
 
     const client = new Client({
@@ -36,9 +61,15 @@ function useDashboardSocket(empresaId: number, onUpdateRequired: () => void) {
         console.log('📡 WebSocket Conectado a la Empresa:', empresaId);
         
         client.subscribe(`/topic/empresa/${empresaId}/dashboard`, (message) => {
-          console.log("⚡ Chispazo recibido del Backend:", message.body);
-          if (message.body === 'NUEVA_VENTA') {
-            onUpdateRequired(); 
+          if (message.body === 'NUEVA_VENTA') auditRef.current(); 
+        });
+
+        client.subscribe(`/topic/mesas/${empresaId}`, (message) => {
+          try {
+            const mesaActualizada = JSON.parse(message.body);
+            mesaRef.current(mesaActualizada);
+          } catch (e) {
+             console.error("Error parseando mesa WS", e);
           }
         });
       },
@@ -48,11 +79,11 @@ function useDashboardSocket(empresaId: number, onUpdateRequired: () => void) {
     });
 
     client.activate();
-
-    return () => {
+    
+    return () => { 
       client.deactivate(); 
     };
-  }, [empresaId, onUpdateRequired]);
+  }, [empresaId]); 
 
   return isLive;
 }
@@ -63,10 +94,13 @@ function useDashboardSocket(empresaId: number, onUpdateRequired: () => void) {
 function ResumenDashboard({ empresaId }: { empresaId: number }) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+  const [mesas, setMesas] = useState<MesaDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [actualizandoFondo, setActualizandoFondo] = useState(false);
+  
+  const [mesaSeleccionada, setMesaSeleccionada] = useState<MesaDTO | null>(null);
 
-  const cargarDatos = useCallback(async (silencioso = false) => {
+  const cargarDatosAuditoria = useCallback(async (silencioso = false) => {
     if (!silencioso) setLoading(true);
     else setActualizandoFondo(true); 
 
@@ -78,60 +112,100 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
       setStats(statsData);
       setMovimientos(movsData);
     } catch (error) {
-      console.error("Error cargando dashboard", error);
+      console.error("Error cargando auditoría", error);
     } finally {
       setLoading(false);
       setTimeout(() => setActualizandoFondo(false), 1000); 
     }
   }, [empresaId]);
 
+  const cargarEstadoMesas = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`http://localhost:8080/api/mesas/empresa/${empresaId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mesasOrdenadas = data.sort((a: MesaDTO, b: MesaDTO) => a.idMesaLocal - b.idMesaLocal);
+        setMesas(mesasOrdenadas);
+      }
+    } catch (error) {
+      console.error("Error cargando mesas", error);
+    }
+  }, [empresaId]);
+
   useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
+    cargarDatosAuditoria();
+    cargarEstadoMesas();
+  }, [cargarDatosAuditoria, cargarEstadoMesas]);
 
-  const handleSocketUpdate = useCallback(() => {
-    cargarDatos(true);
-  }, [cargarDatos]);
+  // Funciones envueltas en useCallback para evitar renders innecesarios
+  const handleAuditUpdate = useCallback(() => {
+    cargarDatosAuditoria(true);
+  }, [cargarDatosAuditoria]);
 
-  const isLive = useDashboardSocket(empresaId, handleSocketUpdate);
+  const handleMesaUpdate = useCallback((mesaActualizada: any) => {
+    setMesas(prevMesas => {
+      const index = prevMesas.findIndex(m => m.idMesaLocal === mesaActualizada.idMesaLocal);
+      let nuevasMesas = [...prevMesas];
+      
+      if (index >= 0) {
+        nuevasMesas[index] = { ...nuevasMesas[index], ...mesaActualizada };
+      } else {
+        nuevasMesas.push(mesaActualizada);
+      }
+      return nuevasMesas.sort((a, b) => a.idMesaLocal - b.idMesaLocal);
+    });
+
+    setMesaSeleccionada(prev => {
+      if (prev && prev.idMesaLocal === mesaActualizada.idMesaLocal) {
+        return { ...prev, ...mesaActualizada };
+      }
+      return prev;
+    });
+  }, []);
+
+  const isLive = useDashboardSocket(empresaId, handleAuditUpdate, handleMesaUpdate);
 
   if (loading && !stats) {
     return (
       <div className="py-20 text-center flex flex-col items-center justify-center animate-pulse">
         <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mb-4" />
-        <p className="text-gray-500 font-bold">Calculando métricas del negocio...</p>
+        <p className="text-gray-500 font-bold">Iniciando Centro de Comando...</p>
       </div>
     );
   }
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
       
-      <div className="flex justify-between items-end mb-8">
+      {/* HEADER DEL DASHBOARD */}
+      <div className="flex justify-between items-end mb-6">
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
               <Activity className="w-6 h-6 text-blue-600" /> Resumen Operativo
             </h2>
+            {/* INDICADOR ONLINE/OFFLINE ESTABILIZADO */}
             <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest border transition-colors ${
-              isLive ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-gray-100 text-gray-500 border-gray-200'
+              isLive ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-red-50 text-red-500 border-red-200'
             }`}>
               {isLive ? <Wifi className="w-3 h-3 animate-pulse" /> : <WifiOff className="w-3 h-3" />}
               {isLive ? 'En Vivo' : 'Offline'}
             </span>
             {actualizandoFondo && <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />}
           </div>
-          <p className="text-sm text-gray-500 font-medium mt-1">Métricas en tiempo real y auditoría de operaciones.</p>
+          <p className="text-sm text-gray-500 font-medium mt-1">El estado de tu salón de billar y la caja negra en tiempo real.</p>
         </div>
-        
-        <button onClick={() => cargarDatos(false)} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors">
+        <button onClick={() => { cargarDatosAuditoria(false); cargarEstadoMesas(); }} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors">
           <RefreshCw className="w-4 h-4" /> Refrescar
         </button>
       </div>
 
+      {/* TARJETAS DE MÉTRICAS */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           <div className={`bg-white rounded-2xl p-5 border shadow-sm flex items-center gap-4 relative overflow-hidden group transition-all duration-500 ${actualizandoFondo ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'}`}>
             <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center relative z-10 border border-blue-100">
               <Package className="w-6 h-6" />
@@ -179,17 +253,120 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
               </p>
             </div>
           </div>
-
         </div>
       )}
 
+      {/* SALÓN EN VIVO */}
+      <div className="mb-10">
+        <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2 mb-4">
+          <Gamepad2 className="w-5 h-5 text-indigo-500" /> Salón en Vivo
+        </h3>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {mesas.length === 0 ? (
+             <div className="col-span-full p-8 border-2 border-dashed border-gray-300 rounded-2xl text-center bg-white">
+                <p className="text-gray-500 font-bold">No hay mesas instaladas en el local. Configúralas desde la Tablet.</p>
+             </div>
+          ) : (
+            mesas.map(mesa => {
+              const isOcupada = mesa.estado === 'OCUPADA';
+              const isAbierta = mesa.estado === 'ABIERTO'; // Solo habilitada, sin jugar
+              const isActiva = isOcupada || isAbierta;
+              const isPool = mesa.tipoJuego === 'POOL';
+
+              return (
+                <div 
+                  key={mesa.idMesaLocal} 
+                  onClick={() => setMesaSeleccionada(mesa)}
+                  className={`cursor-pointer relative overflow-hidden rounded-2xl p-5 transition-all duration-300 ${
+                    isOcupada 
+                      ? 'bg-slate-900 border border-slate-700 shadow-xl hover:scale-[1.03] ring-1 ring-indigo-500/30 hover:ring-indigo-400/60 hover:shadow-indigo-500/20' 
+                      : isAbierta 
+                      ? 'bg-slate-800 border border-amber-500/50 shadow-lg hover:scale-[1.02] ring-1 ring-amber-500/30 hover:ring-amber-400/60 hover:shadow-amber-500/20'
+                      : 'bg-white border border-gray-200 shadow-sm hover:border-blue-300 hover:shadow-md opacity-95 hover:opacity-100'
+                  }`}
+                >
+                  {/* Gradiente de fondo si está activa */}
+                  {isActiva && (
+                    <div className={`absolute -inset-20 opacity-20 blur-2xl rounded-full ${
+                      isOcupada ? (isPool ? 'bg-emerald-500/30' : 'bg-blue-500/30') : 'bg-amber-500/20'
+                    }`}></div>
+                  )}
+
+                  {/* Header de la Tarjeta */}
+                  <div className="relative z-10 flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className={`text-2xl font-black italic tracking-tight ${isActiva ? 'text-white' : 'text-gray-800'}`}>
+                        MESA {String(mesa.idMesaLocal).padStart(2, '0')}
+                      </h4>
+                      <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${
+                        isOcupada ? 'text-indigo-400' : isAbierta ? 'text-amber-400' : 'text-gray-400'
+                      }`}>
+                        {isOcupada ? 'Sesión Activa' : isAbierta ? 'En Espera...' : 'Standby'}
+                      </p>
+                    </div>
+                    {isOcupada ? (
+                      <span className="flex h-3 w-3 relative">
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPool ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
+                        <span className={`relative inline-flex rounded-full h-3 w-3 ${isPool ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                      </span>
+                    ) : isAbierta ? (
+                      <span className="flex h-3 w-3 relative">
+                         <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                      </span>
+                    ) : (
+                      <span className="h-3 w-3 rounded-full bg-gray-300 border border-gray-400"></span>
+                    )}
+                  </div>
+
+                  {/* Detalles Operativos Resumidos */}
+                  <div className="relative z-10 space-y-3">
+                    {isActiva ? (
+                      <>
+                        <div className={`flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border ${isOcupada ? 'border-slate-700' : 'border-amber-900/50'}`}>
+                          <div className="flex items-center gap-2">
+                            <Gamepad2 className={`w-4 h-4 ${isPool ? 'text-emerald-400' : 'text-amber-400'}`} />
+                            <span className="text-xs font-bold text-white">{mesa.tipoJuego}</span>
+                          </div>
+                          {isOcupada && (
+                            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                              <Timer className="w-3 h-3" />
+                              {mesa.fechaApertura ? new Date(mesa.fechaApertura).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 px-1">
+                          <UserCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                          <span className="text-[10px] font-bold text-gray-300 uppercase truncate">
+                            Op: {mesa.usuarioActual?.alias || 'SISTEMA'}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-4 opacity-50">
+                        <Store className="w-8 h-8 text-gray-300 mb-2" />
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Disponible para Jugar</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* CAJA NEGRA (AUDITORÍA) */}
       <div className={`bg-white border rounded-2xl shadow-sm overflow-hidden flex flex-col transition-all duration-500 ${actualizandoFondo ? 'border-blue-300 shadow-blue-900/10' : 'border-gray-200'}`}>
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
-          <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
-            <Clock className="w-5 h-5 text-gray-400" /> Historial de Movimientos
-          </h3>
-          <span className="text-xs font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-full border border-blue-100">
-            Últimos registros
+          <div>
+            <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+              <Clock className="w-5 h-5 text-gray-400" /> Caja Negra (Log de Auditoría)
+            </h3>
+            <p className="text-xs text-gray-500 mt-1 font-medium">Registro 1 a 1 de todos los movimientos de inventario y caja.</p>
+          </div>
+          <span className="text-[10px] font-extrabold bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-100 uppercase tracking-widest">
+            {movimientos.length} Registros
           </span>
         </div>
         
@@ -201,8 +378,8 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                 <th className="p-4">Tipo de Movimiento</th>
                 <th className="p-4">Producto</th>
                 <th className="p-4 text-center">Cant.</th>
-                <th className="p-4">Responsable</th>
-                <th className="p-4">Referencia</th>
+                <th className="p-4">Operario</th>
+                <th className="p-4">Referencia Duelo</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -210,7 +387,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                 <tr>
                   <td colSpan={6} className="p-12 text-center text-gray-500">
                     <Activity className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-                    <p className="font-bold">No hay movimientos registrados aún.</p>
+                    <p className="font-bold">No hay movimientos en la caja negra.</p>
                   </td>
                 </tr>
               ) : (
@@ -221,17 +398,17 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                   });
 
                   return (
-                    <tr key={mov.id} className="hover:bg-gray-50/50 transition-colors">
+                    <tr key={mov.id} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="p-4 pl-6 text-xs font-bold text-gray-600 whitespace-nowrap">
                         {fechaFormateada}
                       </td>
                       <td className="p-4">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                          mov.tipo === 'DESPACHO_MESA' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                          mov.tipo === 'DESPACHO_MESA' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
                           isSalida ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                         }`}>
                           {isSalida ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                          {mov.tipo.replace('_', ' ')}
+                          {mov.tipo.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td className="p-4 font-extrabold text-gray-900 text-sm">
@@ -246,8 +423,8 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                         {mov.creador}
                       </td>
                       <td className="p-4">
-                        <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200">
-                          {mov.referencia || 'N/A'}
+                        <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-1.5 rounded border border-gray-200 group-hover:bg-white transition-colors">
+                          {mov.referencia || 'SIN REF'}
                         </span>
                       </td>
                     </tr>
@@ -258,6 +435,15 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
           </table>
         </div>
       </div>
+
+      {/* MODAL / PANEL DE LA MESA SELECCIONADA */}
+      {mesaSeleccionada && (
+        <MesaControlPanel 
+          mesa={mesaSeleccionada} 
+          empresaId={empresaId} 
+          onClose={() => setMesaSeleccionada(null)} 
+        />
+      )}
 
     </div>
   );
@@ -281,14 +467,10 @@ export default function CompanyDashboard() {
   const nombreEmpresa = location.state?.empresaNombre || 'Negocio Seleccionado';
 
   useEffect(() => {
-    if (!usuarioData) {
-      navigate('/');
-    }
+    if (!usuarioData) navigate('/');
   }, [navigate, usuarioData]);
 
-  if (!usuarioData || !empresaId || isNaN(empresaId)) {
-    return null; 
-  }
+  if (!usuarioData || !empresaId || isNaN(empresaId)) return null; 
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans">
@@ -348,7 +530,7 @@ export default function CompanyDashboard() {
             </button>
             <div className="hidden sm:flex items-center w-full max-w-md relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-3" />
-              <input type="text" placeholder="Buscar productos, terminales o personal..." className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"/>
+              <input type="text" placeholder="Buscar operaciones..." className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"/>
             </div>
           </div>
 
