@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { 
@@ -13,13 +13,6 @@ import Inventario from './Inventario';
 import Terminales from './Terminales';
 import { inventarioService } from '../../api/inventario.service';
 import type { DashboardStats, Movimiento } from '../../types/inventario.types';
-
-// ============================================================================
-// PARCHE PRO: Solución para que SockJS no crashee en React Moderno (Vite/Webpack)
-// ============================================================================
-if (typeof window !== 'undefined') {
-  (window as any).global = window;
-}
 
 // ============================================================================
 // CUSTOM HOOK: LÓGICA DE WEBSOCKETS AISLADA
@@ -276,28 +269,24 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
 export default function CompanyDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { id } = useParams(); 
   
-  // 🔥 SOLUCIÓN: Leemos el Storage de forma 100% segura
   const usuarioString = localStorage.getItem('usuario');
   const usuarioData = usuarioString ? JSON.parse(usuarioString) : null;
   
-  // Inicializamos el estado directamente para evitar renders innecesarios
   const [usuario, setUsuario] = useState(usuarioData?.username || 'U');
   const [activeTab, setActiveTab] = useState('resumen');
   
-  const empresaId = usuarioData?.empresaId;
+  const empresaId = Number(id); 
   const nombreEmpresa = location.state?.empresaNombre || 'Negocio Seleccionado';
 
-  // El useEffect solo sirve para redirigir si se borra la sesión
   useEffect(() => {
     if (!usuarioData) {
       navigate('/');
     }
   }, [navigate, usuarioData]);
 
-  // 🔥 PROTECCIÓN ANTI-PANTALLA BLANCA:
-  // Si no hay datos, no dibujamos nada.
-  if (!usuarioData || !empresaId) {
+  if (!usuarioData || !empresaId || isNaN(empresaId)) {
     return null; 
   }
 
@@ -370,7 +359,6 @@ export default function CompanyDashboard() {
             <div className="w-px h-6 bg-gray-200"></div>
             <div className="flex items-center gap-2 cursor-pointer">
               <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-extrabold text-xs shadow-sm uppercase">
-                {/* Ahora usuario está 100% garantizado que no será undefined */}
                 {usuario.charAt(0)}
               </div>
             </div>
