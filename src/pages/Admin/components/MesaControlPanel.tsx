@@ -54,19 +54,19 @@ export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrig
         if (log.detallesJson) {
           const data = JSON.parse(log.detallesJson);
 
-          // 1. ESTANDARIZADO: Solo escuchamos CLIENTE_NUEVO
-          if (log.tipoEvento === 'CLIENTE_NUEVO' && (data.nombreCliente || data.nombre)) {
+          // 1. Atrapamos clientes (Universal)
+          if (['CLIENTE_NUEVO', 'CLIENTE_CREADO'].includes(log.tipoEvento) && (data.nombreCliente || data.nombre)) {
             const n = data.nombreCliente || data.nombre;
             mapClientes.set(n, n);
           }
 
-          // 2. ESTANDARIZADO: Solo escuchamos DUELO_INICIADO
-          if (log.tipoEvento === 'DUELO_INICIADO' && data.jugadores) {
+          // 2. Atrapamos jugadores de Duelo
+          if (['DUELO_INICIADO', 'DUELO_POOL_INICIADO'].includes(log.tipoEvento) && data.jugadores) {
             data.jugadores.forEach((j: any) => mapClientes.set(j.nombre, j.nombre));
           }
 
-          // 3. ESTANDARIZADO: Solo escuchamos DESPACHO_MESA (Aplica para duelo y pedido directo)
-          if (log.tipoEvento === 'DESPACHO_MESA') {
+          // 3. Atrapamos Consumos (Acepta Pedido Directo al cliente y Despacho al Duelo)
+          if (['DESPACHO_MESA', 'PEDIDO_DIRECTO', 'DESPACHO'].includes(log.tipoEvento)) {
             if (data.productos && Array.isArray(data.productos)) {
               data.productos.forEach((p: any) => {
                 const cant = Number(p.cantidad) || 1;
@@ -76,6 +76,7 @@ export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrig
                 else cuentaCalculada.push({ nombre: p.nombre, precio: prec, cantidad: cant });
               });
             } else if (data.nombre && data.precio) {
+                // Por si el Android manda un solo producto sin estar dentro de un Array "productos"
                 const cant = Number(data.cantidad) || 1;
                 const prec = Number(data.precio) || 0;
                 const existe = cuentaCalculada.find(x => x.nombre === data.nombre);
