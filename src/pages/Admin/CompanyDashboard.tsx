@@ -15,6 +15,7 @@ import Terminales from './Terminales';
 import { inventarioService } from '../../api/inventario.service';
 import type { DashboardStats, Movimiento } from '../../types/inventario.types';
 import MesaControlPanel from './components/MesaControlPanel';
+import api from '../../api/axios.config';
 
 // ============================================================================
 // INTERFACES Y TIPOS
@@ -93,24 +94,26 @@ function useDashboardSocket(empresaId: number, onUpdateAudit: () => void, onUpda
 // ============================================================================
 function ResumenDashboard({ empresaId }: { empresaId: number }) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+  
+  // 🔥 AHORA ES ACTIVIDADES OPERATIVAS, NO SOLO MOVIMIENTOS
+  const [actividades, setActividades] = useState<any[]>([]);
   const [mesas, setMesas] = useState<MesaDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [actualizandoFondo, setActualizandoFondo] = useState(false);
-  
   const [mesaSeleccionada, setMesaSeleccionada] = useState<MesaDTO | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const cargarDatosAuditoria = useCallback(async (silencioso = false) => {
     if (!silencioso) setLoading(true);
     else setActualizandoFondo(true); 
 
     try {
-      const [statsData, movsData] = await Promise.all([
+      const [statsData, actData] = await Promise.all([
         inventarioService.obtenerDashboardStats(empresaId),
-        inventarioService.obtenerHistorialAuditoria(empresaId)
+        api.get(`/api/v1/sync/empresa/${empresaId}/actividad`).then(res => res.data) // 🔥 EL NUEVO ENDPOINT GLOBAL
       ]);
       setStats(statsData);
-      setMovimientos(movsData);
+      setActividades(actData);
     } catch (error) {
       console.error("Error cargando auditoría", error);
     } finally {
@@ -140,9 +143,9 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
     cargarEstadoMesas();
   }, [cargarDatosAuditoria, cargarEstadoMesas]);
 
-  // Funciones envueltas en useCallback para evitar renders innecesarios
   const handleAuditUpdate = useCallback(() => {
     cargarDatosAuditoria(true);
+    setRefreshTrigger(Date.now()); // DESPIERTA A LA MESA ABIERTA
   }, [cargarDatosAuditoria]);
 
   const handleMesaUpdate = useCallback((mesaActualizada: any) => {
@@ -150,18 +153,14 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
       const index = prevMesas.findIndex(m => m.idMesaLocal === mesaActualizada.idMesaLocal);
       let nuevasMesas = [...prevMesas];
       
-      if (index >= 0) {
-        nuevasMesas[index] = { ...nuevasMesas[index], ...mesaActualizada };
-      } else {
-        nuevasMesas.push(mesaActualizada);
-      }
+      if (index >= 0) nuevasMesas[index] = { ...nuevasMesas[index], ...mesaActualizada };
+      else nuevasMesas.push(mesaActualizada);
+      
       return nuevasMesas.sort((a, b) => a.idMesaLocal - b.idMesaLocal);
     });
 
     setMesaSeleccionada(prev => {
-      if (prev && prev.idMesaLocal === mesaActualizada.idMesaLocal) {
-        return { ...prev, ...mesaActualizada };
-      }
+      if (prev && prev.idMesaLocal === mesaActualizada.idMesaLocal) return { ...prev, ...mesaActualizada };
       return prev;
     });
   }, []);
@@ -187,7 +186,6 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
             <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
               <Activity className="w-6 h-6 text-blue-600" /> Resumen Operativo
             </h2>
-            {/* INDICADOR ONLINE/OFFLINE ESTABILIZADO */}
             <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest border transition-colors ${
               isLive ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-red-50 text-red-500 border-red-200'
             }`}>
@@ -270,9 +268,9 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
           ) : (
             mesas.map(mesa => {
               const isOcupada = mesa.estado === 'OCUPADA';
-              const isAbierta = mesa.estado === 'ABIERTO'; // Solo habilitada, sin jugar
+              const isAbierta = mesa.estado === 'ABIERTO'; 
               const isActiva = isOcupada || isAbierta;
-              const isPool = mesa.tipoJuego === 'POOL';
+              const isJuego = ['POOL', '3BANDAS'].includes(mesa.tipoJuego?.toUpperCase() || '');
 
               return (
                 <div 
@@ -286,14 +284,12 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                       : 'bg-white border border-gray-200 shadow-sm hover:border-blue-300 hover:shadow-md opacity-95 hover:opacity-100'
                   }`}
                 >
-                  {/* Gradiente de fondo si está activa */}
                   {isActiva && (
                     <div className={`absolute -inset-20 opacity-20 blur-2xl rounded-full ${
-                      isOcupada ? (isPool ? 'bg-emerald-500/30' : 'bg-blue-500/30') : 'bg-amber-500/20'
+                      isOcupada ? (isJuego ? 'bg-indigo-500/30' : 'bg-emerald-500/30') : 'bg-amber-500/20'
                     }`}></div>
                   )}
 
-                  {/* Header de la Tarjeta */}
                   <div className="relative z-10 flex justify-between items-start mb-4">
                     <div>
                       <h4 className={`text-2xl font-black italic tracking-tight ${isActiva ? 'text-white' : 'text-gray-800'}`}>
@@ -307,8 +303,8 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                     </div>
                     {isOcupada ? (
                       <span className="flex h-3 w-3 relative">
-                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPool ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
-                        <span className={`relative inline-flex rounded-full h-3 w-3 ${isPool ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isJuego ? 'bg-indigo-400' : 'bg-emerald-400'}`}></span>
+                        <span className={`relative inline-flex rounded-full h-3 w-3 ${isJuego ? 'bg-indigo-500' : 'bg-emerald-500'}`}></span>
                       </span>
                     ) : isAbierta ? (
                       <span className="flex h-3 w-3 relative">
@@ -319,14 +315,13 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                     )}
                   </div>
 
-                  {/* Detalles Operativos Resumidos */}
                   <div className="relative z-10 space-y-3">
                     {isActiva ? (
                       <>
                         <div className={`flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border ${isOcupada ? 'border-slate-700' : 'border-amber-900/50'}`}>
                           <div className="flex items-center gap-2">
-                            <Gamepad2 className={`w-4 h-4 ${isPool ? 'text-emerald-400' : 'text-amber-400'}`} />
-                            <span className="text-xs font-bold text-white">{mesa.tipoJuego}</span>
+                            {isJuego ? <Gamepad2 className="w-4 h-4 text-indigo-400" /> : <Store className="w-4 h-4 text-emerald-400" />}
+                            <span className="text-xs font-bold text-white">{mesa.tipoJuego || 'Servicio'}</span>
                           </div>
                           {isOcupada && (
                             <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
@@ -345,7 +340,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                     ) : (
                       <div className="flex flex-col items-center justify-center py-4 opacity-50">
                         <Store className="w-8 h-8 text-gray-300 mb-2" />
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Disponible para Jugar</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mesa Libre</span>
                       </div>
                     )}
                   </div>
@@ -356,17 +351,17 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
         </div>
       </div>
 
-      {/* CAJA NEGRA (AUDITORÍA) */}
+      {/* 🔥 LA NUEVA CAJA NEGRA GLOBAL DE AUDITORÍA */}
       <div className={`bg-white border rounded-2xl shadow-sm overflow-hidden flex flex-col transition-all duration-500 ${actualizandoFondo ? 'border-blue-300 shadow-blue-900/10' : 'border-gray-200'}`}>
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
           <div>
             <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
-              <Clock className="w-5 h-5 text-gray-400" /> Caja Negra (Log de Auditoría)
+              <Clock className="w-5 h-5 text-gray-400" /> Caja Negra (Log de Auditoría Global)
             </h3>
-            <p className="text-xs text-gray-500 mt-1 font-medium">Registro 1 a 1 de todos los movimientos de inventario y caja.</p>
+            <p className="text-xs text-gray-500 mt-1 font-medium">Registro 1 a 1 de todos los eventos operativos del establecimiento.</p>
           </div>
           <span className="text-[10px] font-extrabold bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-100 uppercase tracking-widest">
-            {movimientos.length} Registros
+            {actividades.length} Registros
           </span>
         </div>
         
@@ -375,57 +370,70 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
             <thead className="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-200">
               <tr className="text-[10px] uppercase tracking-widest text-gray-500 font-extrabold bg-gray-50/95 backdrop-blur-md">
                 <th className="p-4 pl-6">Fecha / Hora</th>
-                <th className="p-4">Tipo de Movimiento</th>
-                <th className="p-4">Producto</th>
-                <th className="p-4 text-center">Cant.</th>
-                <th className="p-4">Operario</th>
-                <th className="p-4">Referencia Duelo</th>
+                <th className="p-4">Tipo de Evento</th>
+                <th className="p-4">Ubicación</th>
+                <th className="p-4">Detalles del Evento</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {movimientos.length === 0 ? (
+              {actividades.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-gray-500">
+                  <td colSpan={4} className="p-12 text-center text-gray-500">
                     <Activity className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-                    <p className="font-bold">No hay movimientos en la caja negra.</p>
+                    <p className="font-bold">No hay eventos en la caja negra.</p>
                   </td>
                 </tr>
               ) : (
-                movimientos.map((mov) => {
-                  const isSalida = mov.cantidad < 0;
-                  const fechaFormateada = new Date(mov.fecha).toLocaleString('es-CO', { 
+                actividades.map((act) => {
+                  const fechaFormateada = new Date(act.fechaDispositivo).toLocaleString('es-CO', { 
                     day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' 
                   });
 
+                  const data = act.detallesJson ? JSON.parse(act.detallesJson) : {};
+                  let detalleTexto = "";
+                  
+                  // Traductor inteligente de eventos
+                  if (['CLIENTE_NUEVO', 'CLIENTE_CREADO'].includes(act.tipoEvento)) {
+                    detalleTexto = `Ingreso de Cliente: ${data.nombreCliente || data.nombre || 'N/A'}`;
+                  } else if (['DESPACHO_MESA', 'PEDIDO_DIRECTO', 'DESPACHO', 'MUNICION_AGREGADA'].includes(act.tipoEvento)) {
+                    if (data.productos && Array.isArray(data.productos)) {
+                      detalleTexto = `Consumo: ${data.productos.map((p:any) => `${p.cantidad}x ${p.nombre}`).join(", ")}`;
+                    } else if (data.nombre) {
+                      detalleTexto = `Consumo: ${data.cantidad || 1}x ${data.nombre}`;
+                    } else {
+                      detalleTexto = "Consumo registrado";
+                    }
+                  } else if (act.tipoEvento.includes('DUELO')) {
+                    detalleTexto = `Sesión iniciada: ${data.tipoJuego || 'N/A'} - Tarifa: $${data.tarifaTiempo || 0}/min`;
+                  } else if (act.tipoEvento === 'MESA_CERRADA') {
+                    detalleTexto = `Mesa liberada / Turno cerrado`;
+                  } else if (act.tipoEvento === 'MESA_ABIERTA') {
+                    detalleTexto = `Mesa Habilitada (${data.tipoJuego || 'Servicio'})`;
+                  } else {
+                    detalleTexto = "Actualización de sistema";
+                  }
+
                   return (
-                    <tr key={mov.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <tr key={act.eventoId} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="p-4 pl-6 text-xs font-bold text-gray-600 whitespace-nowrap">
                         {fechaFormateada}
                       </td>
                       <td className="p-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                          mov.tipo === 'DESPACHO_MESA' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
-                          isSalida ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                        }`}>
-                          {isSalida ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                          {mov.tipo.replace(/_/g, ' ')}
+                        <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md font-bold text-[10px] uppercase tracking-wider">
+                          {act.tipoEvento.replace(/_/g, ' ')}
                         </span>
-                      </td>
-                      <td className="p-4 font-extrabold text-gray-900 text-sm">
-                        {mov.productoNombre}
-                      </td>
-                      <td className="p-4 text-center">
-                        <span className={`text-sm font-extrabold ${isSalida ? 'text-red-600' : 'text-emerald-600'}`}>
-                          {mov.cantidad > 0 ? `+${mov.cantidad}` : mov.cantidad}
-                        </span>
-                      </td>
-                      <td className="p-4 text-xs font-bold text-gray-700">
-                        {mov.creador}
                       </td>
                       <td className="p-4">
-                        <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-1.5 rounded border border-gray-200 group-hover:bg-white transition-colors">
-                          {mov.referencia || 'SIN REF'}
-                        </span>
+                        {act.mesaId ? (
+                           <span className="font-extrabold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded text-[10px] uppercase tracking-wider">
+                             Mesa {act.mesaId}
+                           </span>
+                        ) : (
+                           <span className="text-gray-400 font-bold text-[10px]">N/A</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-xs font-medium text-gray-700">
+                        {detalleTexto}
                       </td>
                     </tr>
                   );
@@ -442,6 +450,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
           mesa={mesaSeleccionada} 
           empresaId={empresaId} 
           onClose={() => setMesaSeleccionada(null)} 
+          refreshTrigger={refreshTrigger}
         />
       )}
 
