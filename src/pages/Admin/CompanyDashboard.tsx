@@ -38,7 +38,6 @@ export interface MesaDTO {
 function useDashboardSocket(empresaId: number, onUpdateAudit: () => void, onUpdateMesa: (mesa: any) => void) {
   const [isLive, setIsLive] = useState(false);
   
-  // Usamos Refs para evitar que los cambios en las funciones reinicien el socket
   const auditRef = useRef(onUpdateAudit);
   const mesaRef = useRef(onUpdateMesa);
 
@@ -94,8 +93,6 @@ function useDashboardSocket(empresaId: number, onUpdateAudit: () => void, onUpda
 // ============================================================================
 function ResumenDashboard({ empresaId }: { empresaId: number }) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  
-  // 🔥 AHORA ES ACTIVIDADES OPERATIVAS, NO SOLO MOVIMIENTOS
   const [actividades, setActividades] = useState<any[]>([]);
   const [mesas, setMesas] = useState<MesaDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +107,8 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
     try {
       const [statsData, actData] = await Promise.all([
         inventarioService.obtenerDashboardStats(empresaId),
-        api.get(`/api/v1/sync/empresa/${empresaId}/actividad`).then(res => res.data) // 🔥 EL NUEVO ENDPOINT GLOBAL
+        // 🔥 CORRECCIÓN: api.get para enviar el token JWT y usar el nuevo endpoint
+        api.get(`/api/actividad/empresa/${empresaId}`).then(res => res.data) 
       ]);
       setStats(statsData);
       setActividades(actData);
@@ -124,13 +122,10 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
 
   const cargarEstadoMesas = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:8080/api/mesas/empresa/${empresaId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const mesasOrdenadas = data.sort((a: MesaDTO, b: MesaDTO) => a.idMesaLocal - b.idMesaLocal);
+      // 🔥 CORRECCIÓN: Evitamos fetch puro y usamos la instancia api que tiene el interceptor JWT
+      const res = await api.get(`/api/mesas/empresa/${empresaId}`);
+      if (res.status === 200) {
+        const mesasOrdenadas = res.data.sort((a: MesaDTO, b: MesaDTO) => a.idMesaLocal - b.idMesaLocal);
         setMesas(mesasOrdenadas);
       }
     } catch (error) {
@@ -145,7 +140,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
 
   const handleAuditUpdate = useCallback(() => {
     cargarDatosAuditoria(true);
-    setRefreshTrigger(Date.now()); // DESPIERTA A LA MESA ABIERTA
+    setRefreshTrigger(Date.now()); 
   }, [cargarDatosAuditoria]);
 
   const handleMesaUpdate = useCallback((mesaActualizada: any) => {
@@ -201,7 +196,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
         </button>
       </div>
 
-      {/* TARJETAS DE MÉTRICAS */}
+      {/* TARJETAS DE MÉTRICAS (TU DISEÑO VIBRANTE ORIGINAL) */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           <div className={`bg-white rounded-2xl p-5 border shadow-sm flex items-center gap-4 relative overflow-hidden group transition-all duration-500 ${actualizandoFondo ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'}`}>
@@ -254,7 +249,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
         </div>
       )}
 
-      {/* SALÓN EN VIVO */}
+      {/* SALÓN EN VIVO (MANTENIDO EXACTAMENTE IGUAL) */}
       <div className="mb-10">
         <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2 mb-4">
           <Gamepad2 className="w-5 h-5 text-indigo-500" /> Salón en Vivo
@@ -351,7 +346,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
         </div>
       </div>
 
-      {/* 🔥 LA NUEVA CAJA NEGRA GLOBAL DE AUDITORÍA */}
+      {/* LA NUEVA CAJA NEGRA GLOBAL DE AUDITORÍA */}
       <div className={`bg-white border rounded-2xl shadow-sm overflow-hidden flex flex-col transition-all duration-500 ${actualizandoFondo ? 'border-blue-300 shadow-blue-900/10' : 'border-gray-200'}`}>
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
           <div>
@@ -424,14 +419,14 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                         </span>
                       </td>
                       <td className="p-4">
-  {act.mesaId ? (
-     <span className="font-extrabold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded text-[10px] uppercase tracking-wider">
-       Mesa {String(act.mesaId).padStart(2, '0')}
-     </span>
-  ) : (
-     <span className="text-gray-400 font-bold text-[10px]">N/A</span>
-  )}
-</td>
+                        {act.mesaId ? (
+                           <span className="font-extrabold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded text-[10px] uppercase tracking-wider">
+                             Mesa {String(act.mesaId).padStart(2, '0')}
+                           </span>
+                        ) : (
+                           <span className="text-gray-400 font-bold text-[10px]">N/A</span>
+                        )}
+                      </td>
                       <td className="p-4 text-xs font-medium text-gray-700">
                         {detalleTexto}
                       </td>
