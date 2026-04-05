@@ -424,14 +424,14 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                         </span>
                       </td>
                       <td className="p-4">
-                        {act.mesaId ? (
-                           <span className="font-extrabold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded text-[10px] uppercase tracking-wider">
-                             Mesa {act.mesaId}
-                           </span>
-                        ) : (
-                           <span className="text-gray-400 font-bold text-[10px]">N/A</span>
-                        )}
-                      </td>
+  {act.mesaId ? (
+     <span className="font-extrabold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded text-[10px] uppercase tracking-wider">
+       Mesa {String(act.mesaId).padStart(2, '0')}
+     </span>
+  ) : (
+     <span className="text-gray-400 font-bold text-[10px]">N/A</span>
+  )}
+</td>
                       <td className="p-4 text-xs font-medium text-gray-700">
                         {detalleTexto}
                       </td>
