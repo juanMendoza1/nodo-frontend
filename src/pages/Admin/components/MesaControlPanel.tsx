@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowLeft, Gamepad2, Timer, ShieldCheck, Beer, 
-  Plus, ShoppingCart, Send, Zap, RefreshCw, 
-  Store, Users, UserCircle2
+  ShoppingCart, Zap, RefreshCw, Store, Users, 
+  UserCircle2, MoreVertical, Swords
 } from 'lucide-react';
 import type { MesaDTO } from '../CompanyDashboard';
 import api from '../../../api/axios.config'; 
@@ -14,20 +14,35 @@ interface MesaControlPanelProps {
   refreshTrigger?: number; 
 }
 
+interface Consumo {
+  nombre: string;
+  precio: number;
+  cantidad: number;
+}
+
+interface ClienteState {
+  nombre: string;
+  consumos: Consumo[];
+  subtotal: number;
+}
+
+interface DueloState {
+  activo: boolean;
+  modalidad: string;
+  regla: string;
+  jugadores: string[];
+}
+
 export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrigger }: MesaControlPanelProps) {
   const isOcupada = mesa.estado === 'OCUPADA' || mesa.estado === 'ABIERTO';
   const isJuego = ['POOL', '3BANDAS'].includes(mesa.tipoJuego?.toUpperCase() || '');
 
-  const [cuenta, setCuenta] = useState<any[]>([]);
-  const [jugadores, setJugadores] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-
-  const [catalogo] = useState([
-    { id: 1, nombre: 'Cerveza Club Colombia', precio: 5000 },
-    { id: 2, nombre: 'Gatorade Azul', precio: 3500 },
-    { id: 3, nombre: 'Paquete de Papas Limón', precio: 2000 },
-    { id: 4, nombre: 'Agua Manantial con Gas', precio: 2500 }
-  ]);
+  
+  // Estados Estructurados por Entidades
+  const [consumosMesa, setConsumosMesa] = useState<Consumo[]>([]); 
+  const [clientesMap, setClientesMap] = useState<Map<string, ClienteState>>(new Map());
+  const [dueloInfo, setDueloInfo] = useState<DueloState>({ activo: false, modalidad: '', regla: '', jugadores: [] });
 
   const cargarCuentaDeLaMesa = useCallback(async () => {
     setCargando(true);
@@ -35,9 +50,21 @@ export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrig
       const response = await api.get(`/api/mesas/empresa/${empresaId}/mesa/${mesa.idMesaLocal}/actividad`);
       const logs = response.data; 
 
-      let cuentaCalculada: any[] = [];
-      let mapClientes = new Map<string, string>(); 
+      let calcConsumosMesa: Consumo[] = [];
+      let calcClientes = new Map<string, ClienteState>(); 
+      let calcDuelo: DueloState = { activo: false, modalidad: '', regla: '', jugadores: [] };
       let eventosProcesados = new Set<string>(); 
+
+      const agregarProducto = (targetArray: Consumo[], p: any) => {
+        const cant = Number(p.cantidad) || 1;
+        const prec = Number(p.precio) || 0;
+        const existe = targetArray.find(x => x.nombre === p.nombre);
+        if (existe) {
+            existe.cantidad += cant;
+        } else {
+            targetArray.push({ nombre: p.nombre, precio: prec, cantidad: cant });
+        }
+      };
 
       for (let i = logs.length - 1; i >= 0; i--) {
         const log = logs[i];
@@ -46,62 +73,83 @@ export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrig
         eventosProcesados.add(log.eventoId);
 
         if (log.tipoEvento === 'MESA_CERRADA' || log.tipoEvento === 'MESA_CREADA') {
-          cuentaCalculada = [];
-          mapClientes.clear();
+          calcConsumosMesa = [];
+          calcClientes.clear();
+          calcDuelo = { activo: false, modalidad: '', regla: '', jugadores: [] };
           continue; 
         }
 
         if (log.detallesJson) {
           const data = JSON.parse(log.detallesJson);
 
-          // 1. Atrapamos clientes (Universal)
+          // 1. Detección de Clientes en la mesa
           if (['CLIENTE_NUEVO', 'CLIENTE_CREADO'].includes(log.tipoEvento) && (data.nombreCliente || data.nombre)) {
             const n = data.nombreCliente || data.nombre;
-            mapClientes.set(n, n);
+            if (!calcClientes.has(n)) {
+                calcClientes.set(n, { nombre: n, consumos: [], subtotal: 0 });
+            }
           }
 
-          // 2. Atrapamos jugadores de Duelo
-          if (['DUELO_INICIADO', 'DUELO_POOL_INICIADO'].includes(log.tipoEvento) && data.jugadores) {
-            data.jugadores.forEach((j: any) => mapClientes.set(j.nombre, j.nombre));
+          // 2. Detección de Duelos (Unión de Equipos/Jugadores)
+          if (['DUELO_INICIADO', 'DUELO_POOL_INICIADO'].includes(log.tipoEvento)) {
+            calcDuelo = {
+                activo: true,
+                modalidad: data.modalidad || mesa.tipoJuego || 'DUELO',
+                regla: data.reglaCobro || mesa.reglaDuelo || 'ESTANDAR',
+                jugadores: data.jugadores ? data.jugadores.map((j:any) => j.nombre) : []
+            };
+            // Aseguramos que los jugadores del duelo existan como CardViews de clientes
+            calcDuelo.jugadores.forEach(jName => {
+                if (!calcClientes.has(jName)) calcClientes.set(jName, { nombre: jName, consumos: [], subtotal: 0 });
+            });
           }
 
-          // 3. Atrapamos Consumos (Acepta Pedido Directo al cliente y Despacho al Duelo)
+          if (['DUELO_FINALIZADO', 'DUELO_TERMINADO'].includes(log.tipoEvento)) {
+             calcDuelo.activo = false; 
+          }
+
+          // 3. Enlace de Consumos a las CardViews
           if (['DESPACHO_MESA', 'PEDIDO_DIRECTO', 'DESPACHO'].includes(log.tipoEvento)) {
+            const clienteAsignado = data.clienteNombre || data.nombreCliente || data.nombreJugador;
+            
+            if (clienteAsignado && !calcClientes.has(clienteAsignado)) {
+                calcClientes.set(clienteAsignado, { nombre: clienteAsignado, consumos: [], subtotal: 0 });
+            }
+
+            const targetArray = clienteAsignado ? calcClientes.get(clienteAsignado)!.consumos : calcConsumosMesa;
+
             if (data.productos && Array.isArray(data.productos)) {
-              data.productos.forEach((p: any) => {
-                const cant = Number(p.cantidad) || 1;
-                const prec = Number(p.precio) || 0;
-                const existe = cuentaCalculada.find(x => x.nombre === p.nombre);
-                if (existe) existe.cantidad += cant;
-                else cuentaCalculada.push({ nombre: p.nombre, precio: prec, cantidad: cant });
-              });
+              data.productos.forEach((p: any) => agregarProducto(targetArray, p));
             } else if (data.nombre && data.precio) {
-                // Por si el Android manda un solo producto sin estar dentro de un Array "productos"
-                const cant = Number(data.cantidad) || 1;
-                const prec = Number(data.precio) || 0;
-                const existe = cuentaCalculada.find(x => x.nombre === data.nombre);
-                if (existe) existe.cantidad += cant;
-                else cuentaCalculada.push({ nombre: data.nombre, precio: prec, cantidad: cant });
+              agregarProducto(targetArray, data);
             }
           }
         }
       }
       
-      setCuenta(cuentaCalculada.reverse());
-      setJugadores(Array.from(mapClientes.values()).map(nombre => ({ nombre })));
+      // Recalcular los subtotales de cada CardView
+      calcClientes.forEach(cliente => {
+          cliente.subtotal = cliente.consumos.reduce((acc, item) => acc + (item.precio * item.cantidad), 0);
+      });
+
+      setConsumosMesa(calcConsumosMesa);
+      setClientesMap(calcClientes);
+      setDueloInfo(calcDuelo);
 
     } catch (error) {
-      console.error("Error cargando la cuenta:", error);
+      console.error("Error cargando la cuenta estructurada:", error);
     } finally {
       setCargando(false);
     }
-  }, [empresaId, mesa.idMesaLocal]);
+  }, [empresaId, mesa.idMesaLocal, mesa.tipoJuego, mesa.reglaDuelo]);
 
   useEffect(() => {
     cargarCuentaDeLaMesa();
   }, [cargarCuentaDeLaMesa, refreshTrigger]);
 
-  const totalCuenta = cuenta.reduce((acc, item) => acc + (item.precio * item.cantidad), 0);
+  const subtotalMesa = consumosMesa.reduce((acc, item) => acc + (item.precio * item.cantidad), 0);
+  const subtotalClientes = Array.from(clientesMap.values()).reduce((acc, cli) => acc + cli.subtotal, 0);
+  const granTotal = subtotalMesa + subtotalClientes;
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900 animate-in slide-in-from-right duration-300 flex flex-col">
@@ -134,27 +182,16 @@ export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrig
       </header>
 
       <div className="flex-1 overflow-hidden flex bg-slate-900">
-        <div className="w-1/4 p-6 border-r border-slate-800 overflow-y-auto bg-slate-900">
+        
+        {/* PANEL IZQUIERDO - ESTADO DE MESA */}
+        <div className="w-1/4 max-w-sm p-6 border-r border-slate-800 overflow-y-auto bg-slate-900 shrink-0">
           <h2 className="text-white font-extrabold text-lg flex items-center gap-2 mb-6 uppercase tracking-wider">
             {isJuego ? <Gamepad2 className="text-indigo-400" /> : <Store className="text-emerald-400" />}
-            {isJuego ? 'Estado del Juego' : 'Mesa Servicio'}
+            {isJuego ? 'Estado de Mesa' : 'Mesa Servicio'}
           </h2>
 
           {mesa.estado !== 'DISPONIBLE' ? (
             <div className="space-y-5">
-              {isJuego && (
-                <>
-                  <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-inner">
-                     <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Modalidad</p>
-                     <p className="text-2xl font-black text-white">{mesa.tipoJuego}</p>
-                  </div>
-                  <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-inner">
-                     <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Regla de Cobro</p>
-                     <p className="text-lg font-bold text-indigo-300">{mesa.reglaDuelo?.replace(/_/g, ' ') || 'ESTÁNDAR'}</p>
-                  </div>
-                </>
-              )}
-
               <div className={`rounded-2xl p-4 border ${isJuego ? 'bg-indigo-950/30 border-indigo-900/50' : 'bg-slate-800 border-slate-700'}`}>
                 <div className="flex items-center justify-between mb-1">
                   <p className={`text-[10px] font-bold uppercase tracking-widest ${isJuego ? 'text-indigo-400/70' : 'text-slate-400'}`}>Inicio de Sesión</p>
@@ -165,20 +202,12 @@ export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrig
                 </p>
               </div>
 
-              {jugadores.length > 0 && (
-                <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 mt-6">
-                  <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <Users className="w-3 h-3" /> Personas en Mesa
+              <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700">
+                  <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Entidades Detectadas</p>
+                  <p className="text-2xl font-black text-white flex items-center gap-2">
+                     <Users className="w-5 h-5 text-emerald-500"/> {clientesMap.size}
                   </p>
-                  <div className="flex flex-col gap-2">
-                    {jugadores.map((j, i) => (
-                      <span key={i} className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 flex items-center gap-2">
-                         <UserCircle2 className="w-4 h-4 text-emerald-500"/> {j.nombre}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           ) : (
             <div className="text-center py-20 opacity-50">
@@ -188,76 +217,161 @@ export default function MesaControlPanel({ mesa, empresaId, onClose, refreshTrig
           )}
         </div>
 
-        <div className="flex-1 p-6 flex flex-col bg-slate-950 shadow-2xl z-10 relative">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-white font-extrabold text-lg flex items-center gap-2">
-              <ShoppingCart className="text-emerald-400" /> Factura Abierta
+        {/* PANEL CENTRAL Y DERECHO EXPANDIDO - VISTA DE CARDVIEWS */}
+        <div className="flex-1 p-6 lg:p-8 flex flex-col bg-slate-950 shadow-2xl z-10 relative overflow-hidden">
+          <div className="flex justify-between items-center mb-8 shrink-0">
+            <h2 className="text-white font-extrabold text-2xl flex items-center gap-3">
+              <ShoppingCart className="text-emerald-400 w-8 h-8" /> Cuentas Activas
             </h2>
-            <button onClick={cargarCuentaDeLaMesa} className="text-slate-500 hover:text-white transition-colors">
-              <RefreshCw className={`w-5 h-5 ${cargando ? 'animate-spin text-emerald-500' : ''}`} />
+            <button onClick={cargarCuentaDeLaMesa} className="text-slate-500 hover:text-white transition-colors bg-slate-900 px-4 py-2 rounded-xl border border-slate-800 flex items-center gap-2 font-bold text-sm">
+              <RefreshCw className={`w-4 h-4 ${cargando ? 'animate-spin text-emerald-500' : ''}`} />
+              Sincronizar Cuentas
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-            {cargando && cuenta.length === 0 ? (
+          <div className="flex-1 overflow-y-auto pr-4 pb-20">
+            {cargando && consumosMesa.length === 0 && clientesMap.size === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-600">
-                <RefreshCw className="w-8 h-8 mb-4 animate-spin text-slate-500" />
-                <p className="font-bold">Sincronizando caja negra...</p>
+                <RefreshCw className="w-10 h-10 mb-4 animate-spin text-slate-500" />
+                <p className="font-bold text-lg">Sincronizando entidades...</p>
               </div>
-            ) : cuenta.length === 0 ? (
+            ) : consumosMesa.length === 0 && clientesMap.size === 0 && !dueloInfo.activo ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-600">
-                <Beer className="w-16 h-16 mb-4 opacity-20" />
-                <p className="font-bold">No hay consumos registrados.</p>
+                <Beer className="w-20 h-20 mb-4 opacity-20" />
+                <p className="font-bold text-lg">No hay clientes ni consumos registrados.</p>
               </div>
             ) : (
-              cuenta.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between bg-slate-800 p-4 rounded-2xl border border-slate-700">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold border border-slate-600">
-                      {item.cantidad}
+              <div className="flex flex-col gap-8">
+                
+                {/* 1. CARD COMPARTIDA: DUELO ACTIVO */}
+                {dueloInfo.activo && (
+                  <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-3xl p-8 relative overflow-hidden shadow-[0_0_40px_rgba(99,102,241,0.1)]">
+                    <div className="absolute -top-10 -right-10 p-3 opacity-10">
+                       <Swords className="w-64 h-64 text-indigo-400" />
                     </div>
-                    <div>
-                      <p className="text-white font-bold">{item.nombre}</p>
-                      <p className="text-slate-400 text-xs">${item.precio?.toLocaleString()} c/u</p>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-8">
+                            <span className="px-4 py-1.5 bg-indigo-500 text-white text-xs font-black uppercase tracking-widest rounded-lg shadow-lg shadow-indigo-500/20">Duelo Activo</span>
+                            <span className="text-indigo-300 font-bold text-base tracking-wider">{dueloInfo.modalidad} • {dueloInfo.regla?.replace(/_/g, ' ')}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-center gap-12">
+                            {dueloInfo.jugadores.map((jugador, idx) => (
+                                <React.Fragment key={jugador}>
+                                    <div className="text-center flex flex-col items-center">
+                                        <div className="w-20 h-20 rounded-full bg-slate-900 border-2 border-indigo-400 flex items-center justify-center shadow-[0_0_20px_rgba(129,140,248,0.4)] mb-4">
+                                            <UserCircle2 className="w-10 h-10 text-indigo-300" />
+                                        </div>
+                                        <p className="text-white font-extrabold text-2xl tracking-tight">{jugador}</p>
+                                    </div>
+                                    {idx < dueloInfo.jugadores.length - 1 && (
+                                        <div className="text-4xl font-black text-indigo-500 italic mt-[-30px]">VS</div>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                        </div>
                     </div>
                   </div>
-                  <p className="text-emerald-400 font-black text-lg">
-                    ${(item.precio * item.cantidad).toLocaleString()}
-                  </p>
+                )}
+
+                {/* 2. GRID DE CARDVIEWS (Mesa y Clientes) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    {/* Tarjeta de Mesa General */}
+                    {consumosMesa.length > 0 && (
+                        <div className="bg-slate-900/80 border border-slate-700/80 rounded-3xl p-6 flex flex-col shadow-lg">
+                            <div className="flex justify-between items-start mb-6 pb-6 border-b border-slate-800">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center">
+                                        <Store className="w-6 h-6 text-slate-400" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-white font-extrabold text-lg">Mesa General</h3>
+                                        <p className="text-slate-500 text-sm font-medium">Consumo sin asignar</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex-1 space-y-3 mb-6">
+                                {consumosMesa.map((prod, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-slate-950/50 p-3 rounded-xl border border-slate-800/50">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-slate-800 w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 font-bold text-xs">
+                                              {prod.cantidad}
+                                            </div>
+                                            <span className="text-slate-300 font-medium text-sm">{prod.nombre}</span>
+                                        </div>
+                                        <span className="text-slate-400 font-mono font-bold">${(prod.precio * prod.cantidad).toLocaleString()}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-auto pt-4 border-t border-slate-800 flex justify-between items-end">
+                                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Subtotal</span>
+                                <span className="text-white font-black text-2xl">${subtotalMesa.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tarjetas de Clientes Individuales */}
+                    {Array.from(clientesMap.values()).map(cliente => (
+                        <div key={cliente.nombre} className="bg-slate-900 border border-slate-700 rounded-3xl p-6 flex flex-col shadow-lg hover:border-emerald-500/50 transition-all group relative">
+                            <div className="flex justify-between items-start mb-6 pb-6 border-b border-slate-800">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-emerald-950/30 border border-emerald-900/50 flex items-center justify-center group-hover:bg-emerald-500 group-hover:border-emerald-400 transition-colors">
+                                        <UserCircle2 className="w-6 h-6 text-emerald-500 group-hover:text-white transition-colors" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-white font-extrabold text-lg truncate max-w-[150px]" title={cliente.nombre}>{cliente.nombre}</h3>
+                                        <p className="text-slate-500 text-sm font-medium">{cliente.consumos.length} items</p>
+                                    </div>
+                                </div>
+                                {/* BOTÓN 3 PUNTOS PARA ACCIONES FUTURAS */}
+                                <button className="text-slate-400 hover:text-white hover:bg-slate-800 p-2 rounded-xl transition-all">
+                                    <MoreVertical className="w-5 h-5" />
+                                </button>
+                            </div>
+                            
+                            <div className="flex-1 space-y-3 mb-6">
+                                {cliente.consumos.length === 0 ? (
+                                    <div className="h-full flex items-center justify-center">
+                                       <p className="text-slate-600 text-sm italic font-medium">No tiene consumos</p>
+                                    </div>
+                                ) : (
+                                    cliente.consumos.map((prod, idx) => (
+                                        <div key={idx} className="flex justify-between items-center bg-slate-950/50 p-3 rounded-xl border border-slate-800/50">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-emerald-950/50 border border-emerald-900/50 w-8 h-8 rounded-lg flex items-center justify-center text-emerald-400 font-bold text-xs">
+                                                  {prod.cantidad}
+                                                </div>
+                                                <span className="text-slate-300 font-medium text-sm truncate max-w-[120px]" title={prod.nombre}>{prod.nombre}</span>
+                                            </div>
+                                            <span className="text-slate-400 font-mono font-bold">${(prod.precio * prod.cantidad).toLocaleString()}</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <div className="mt-auto pt-4 border-t border-slate-800 flex justify-between items-end">
+                                <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Subtotal</span>
+                                <span className="text-emerald-400 font-black text-2xl">${cliente.subtotal.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    ))}
+
                 </div>
-              ))
+
+              </div>
             )}
           </div>
 
-          <div className="mt-6 pt-6 border-t border-slate-800">
-            <div className="flex justify-between items-end mb-4">
-              <p className="text-slate-400 font-bold uppercase tracking-widest">Total Consumo</p>
-              <p className="text-4xl font-black text-white">${totalCuenta.toLocaleString()}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="w-1/3 p-6 border-l border-slate-800 overflow-y-auto bg-slate-900">
-          <h2 className="text-white font-extrabold text-lg flex items-center gap-2 mb-6">
-            <Send className="text-amber-400" /> Despacho Remoto
-          </h2>
-          <p className="text-slate-400 text-sm mb-6">
-            Despacha productos desde el administrador. Aparecerán en la Tablet del operario.
-          </p>
-
-          <div className="grid grid-cols-2 gap-3">
-            {catalogo.map(prod => (
-              <button 
-                key={prod.id}
-                className="flex flex-col items-start p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-500/50 rounded-2xl transition-all group text-left"
-              >
-                <span className="text-white font-bold text-sm mb-2 line-clamp-2">{prod.nombre}</span>
-                <span className="text-amber-400 font-black mt-auto">${prod.precio.toLocaleString()}</span>
-                <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-slate-900 group-hover:bg-amber-500 flex items-center justify-center transition-colors">
-                  <Plus className="w-4 h-4 text-slate-400 group-hover:text-white" />
+          {/* Gran Total Bottom Bar Flotante */}
+          <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-950 via-slate-950 to-transparent pointer-events-none">
+             <div className="bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl p-4 flex justify-between items-center pointer-events-auto shadow-2xl">
+                <div>
+                   <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-1">Gran Total de la Mesa</p>
+                   <p className="text-slate-500 text-xs font-medium">Suma de Mesa General + Cuentas Individuales</p>
                 </div>
-              </button>
-            ))}
+                <p className="text-4xl font-black text-white tracking-tight">${granTotal.toLocaleString()}</p>
+             </div>
           </div>
         </div>
 
