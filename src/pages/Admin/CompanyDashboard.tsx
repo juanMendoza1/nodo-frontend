@@ -5,15 +5,14 @@ import SockJS from 'sockjs-client';
 import { 
   LayoutDashboard, Package, Users, MonitorSmartphone, Settings, Bell, Search, 
   Menu, ArrowLeft, AlertTriangle, Store, Activity, RefreshCw, Clock, 
-  ArrowUpRight, ArrowDownRight, Wifi, WifiOff, Gamepad2, UserCircle2, Timer,
-  X, Zap, Info, ShieldCheck
+  Wifi, WifiOff, Gamepad2, UserCircle2, Timer, ShieldCheck
 } from 'lucide-react';
 
 import PersonalSlots from './PersonalSlots';
 import Inventario from './Inventario';
 import Terminales from './Terminales';
 import { inventarioService } from '../../api/inventario.service';
-import type { DashboardStats, Movimiento } from '../../types/inventario.types';
+import type { DashboardStats } from '../../types/inventario.types';
 import MesaControlPanel from './components/MesaControlPanel';
 import api from '../../api/axios.config';
 
@@ -107,7 +106,6 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
     try {
       const [statsData, actData] = await Promise.all([
         inventarioService.obtenerDashboardStats(empresaId),
-        // 🔥 CORRECCIÓN: api.get para enviar el token JWT y usar el nuevo endpoint
         api.get(`/api/actividad/empresa/${empresaId}`).then(res => res.data) 
       ]);
       setStats(statsData);
@@ -122,7 +120,6 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
 
   const cargarEstadoMesas = useCallback(async () => {
     try {
-      // 🔥 CORRECCIÓN: Evitamos fetch puro y usamos la instancia api que tiene el interceptor JWT
       const res = await api.get(`/api/mesas/empresa/${empresaId}`);
       if (res.status === 200) {
         const mesasOrdenadas = res.data.sort((a: MesaDTO, b: MesaDTO) => a.idMesaLocal - b.idMesaLocal);
@@ -196,7 +193,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
         </button>
       </div>
 
-      {/* TARJETAS DE MÉTRICAS (TU DISEÑO VIBRANTE ORIGINAL) */}
+      {/* TARJETAS DE MÉTRICAS */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           <div className={`bg-white rounded-2xl p-5 border shadow-sm flex items-center gap-4 relative overflow-hidden group transition-all duration-500 ${actualizandoFondo ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'}`}>
@@ -249,7 +246,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
         </div>
       )}
 
-      {/* SALÓN EN VIVO (MANTENIDO EXACTAMENTE IGUAL) */}
+      {/* SALÓN EN VIVO */}
       <div className="mb-10">
         <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2 mb-4">
           <Gamepad2 className="w-5 h-5 text-indigo-500" /> Salón en Vivo
@@ -346,7 +343,7 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
         </div>
       </div>
 
-      {/* LA NUEVA CAJA NEGRA GLOBAL DE AUDITORÍA */}
+      {/* CAJA NEGRA GLOBAL DE AUDITORÍA */}
       <div className={`bg-white border rounded-2xl shadow-sm overflow-hidden flex flex-col transition-all duration-500 ${actualizandoFondo ? 'border-blue-300 shadow-blue-900/10' : 'border-gray-200'}`}>
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
           <div>
@@ -387,7 +384,6 @@ function ResumenDashboard({ empresaId }: { empresaId: number }) {
                   const data = act.detallesJson ? JSON.parse(act.detallesJson) : {};
                   let detalleTexto = "";
                   
-                  // Traductor inteligente de eventos
                   if (['CLIENTE_NUEVO', 'CLIENTE_CREADO'].includes(act.tipoEvento)) {
                     detalleTexto = `Ingreso de Cliente: ${data.nombreCliente || data.nombre || 'N/A'}`;
                   } else if (['DESPACHO_MESA', 'PEDIDO_DIRECTO', 'DESPACHO', 'MUNICION_AGREGADA'].includes(act.tipoEvento)) {
@@ -470,9 +466,28 @@ export default function CompanyDashboard() {
   const empresaId = Number(id); 
   const nombreEmpresa = location.state?.empresaNombre || 'Negocio Seleccionado';
 
+  // 🔥 LÓGICA DE LEGOS: Verificamos qué permisos/módulos tiene el usuario
+  const permisosUsuario = usuarioData?.permisos || [];
+  const rolesUsuario = usuarioData?.roles || [];
+  const isSuperAdmin = rolesUsuario.includes('SUPER') || rolesUsuario.includes('ROLE_SUPER');
+
+  const tieneModulo = (modulo: string) => {
+    if (isSuperAdmin) return true; // El SuperAdmin ve todo para poder dar soporte
+    return permisosUsuario.includes(modulo);
+  };
+
+  // 🔥 Efecto para que, si no tiene "Caja", lo mande a Inventario o al que tenga por defecto
   useEffect(() => {
-    if (!usuarioData) navigate('/');
-  }, [navigate, usuarioData]);
+    if (!usuarioData) {
+      navigate('/');
+      return;
+    }
+    if (!tieneModulo('MOD_CAJA') && activeTab === 'resumen') {
+      if (tieneModulo('MOD_INVENTARIO')) setActiveTab('inventario');
+      else if (tieneModulo('MOD_PERSONAL')) setActiveTab('personal');
+      else if (tieneModulo('MOD_TABLETS')) setActiveTab('terminales');
+    }
+  }, [navigate, usuarioData, permisosUsuario, activeTab]);
 
   if (!usuarioData || !empresaId || isNaN(empresaId)) return null; 
 
@@ -498,23 +513,32 @@ export default function CompanyDashboard() {
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
-          <p className="px-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">Principal</p>
+          <p className="px-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">Módulos Contratados</p>
           
-          <button onClick={() => setActiveTab('resumen')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'resumen' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
-            <LayoutDashboard className="w-4 h-4" /> Panel General
-          </button>
+          {/* 🔥 DIBUJAMOS LOS BOTONES SOLO SI TIENE EL MÓDULO */}
+          {tieneModulo('MOD_CAJA') && (
+            <button onClick={() => setActiveTab('resumen')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'resumen' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <LayoutDashboard className="w-4 h-4" /> Panel de Caja
+            </button>
+          )}
           
-          <button onClick={() => setActiveTab('inventario')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'inventario' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
-            <Package className="w-4 h-4" /> Inventario
-          </button>
+          {tieneModulo('MOD_INVENTARIO') && (
+            <button onClick={() => setActiveTab('inventario')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'inventario' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <Package className="w-4 h-4" /> Inventario
+            </button>
+          )}
           
-          <button onClick={() => setActiveTab('personal')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'personal' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
-            <Users className="w-4 h-4" /> Personal
-          </button>
+          {tieneModulo('MOD_PERSONAL') && (
+            <button onClick={() => setActiveTab('personal')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'personal' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <Users className="w-4 h-4" /> Personal
+            </button>
+          )}
           
-          <button onClick={() => setActiveTab('terminales')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'terminales' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
-            <MonitorSmartphone className="w-4 h-4" /> Terminales (Tablets)
-          </button>
+          {tieneModulo('MOD_TABLETS') && (
+            <button onClick={() => setActiveTab('terminales')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'terminales' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <MonitorSmartphone className="w-4 h-4" /> Terminales
+            </button>
+          )}
 
           <div className="my-4 border-t border-gray-100"></div>
           
@@ -525,8 +549,8 @@ export default function CompanyDashboard() {
         </nav>
       </aside>
 
+      {/* HEADER SUPERIOR */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-10">
           <div className="flex items-center gap-4 flex-1">
             <button className="md:hidden text-gray-500 hover:text-gray-900">
@@ -551,11 +575,21 @@ export default function CompanyDashboard() {
           </div>
         </header>
 
+        {/* CONTENIDO DINÁMICO */}
         <div className="flex-1 overflow-auto p-6 lg:p-8 bg-gray-50/50">
-          {activeTab === 'resumen' && <ResumenDashboard empresaId={empresaId} />}
-          {activeTab === 'personal' && <PersonalSlots empresaId={empresaId} />}
-          {activeTab === 'inventario' && <Inventario empresaId={empresaId} />}
-          {activeTab === 'terminales' && <Terminales empresaId={empresaId} />}
+          {activeTab === 'resumen' && tieneModulo('MOD_CAJA') && <ResumenDashboard empresaId={empresaId} />}
+          {activeTab === 'personal' && tieneModulo('MOD_PERSONAL') && <PersonalSlots empresaId={empresaId} />}
+          {activeTab === 'inventario' && tieneModulo('MOD_INVENTARIO') && <Inventario empresaId={empresaId} />}
+          {activeTab === 'terminales' && tieneModulo('MOD_TABLETS') && <Terminales empresaId={empresaId} />}
+          
+          {/* Si no tiene nada */}
+          {permisosUsuario.filter((p: string) => p.startsWith('MOD_')).length === 0 && !isSuperAdmin && (
+             <div className="flex flex-col items-center justify-center h-full text-center">
+                 <ShieldCheck className="w-16 h-16 text-gray-300 mb-4" />
+                 <h2 className="text-xl font-bold text-gray-900">Tu suscripción está inactiva</h2>
+                 <p className="text-gray-500 mt-2 max-w-md">No tienes módulos asignados. Contacta al administrador para adquirir un plan (Inventario, POS, etc).</p>
+             </div>
+          )}
         </div>
       </main>
       

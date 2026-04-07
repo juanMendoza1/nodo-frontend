@@ -3,16 +3,19 @@ import { Layers, X, Check, Trash2 } from 'lucide-react';
 import { inventarioService } from '../../../api/inventario.service';
 import type { UnidadParametro } from '../../../types/inventario.types';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
+import toast from 'react-hot-toast'; // 🔥 Asegúrate de tenerlo importado
 
 interface ParametrosModalProps {
   isOpen: boolean;
   onClose: () => void;
   categorias: UnidadParametro[];
   unidades: UnidadParametro[];
+  empresaId: number;
   onParametrosChange: () => void; // Para avisarle al padre que recargue
 }
 
-export default function ParametrosModal({ isOpen, onClose, categorias, unidades, onParametrosChange }: ParametrosModalProps) {
+// 🔥 CORRECCIÓN AQUÍ: Agregamos empresaId dentro de las llaves { ... }
+export default function ParametrosModal({ isOpen, onClose, categorias, unidades, empresaId, onParametrosChange }: ParametrosModalProps) {
   const [estructuraActiva, setEstructuraActiva] = useState('CAT_PROD');
   const [nuevoParametro, setNuevoParametro] = useState({ nombre: '', codigo: '' });
   
@@ -29,33 +32,49 @@ export default function ParametrosModal({ isOpen, onClose, categorias, unidades,
     });
   };
 
+  // 🔥 ACTUALIZACIÓN: Usamos toast.promise en lugar de try...catch con alerts
   const handleGuardarParametro = async () => {
     if (!nuevoParametro.nombre.trim() || !nuevoParametro.codigo.trim()) {
-      alert("Por favor ingrese el código y el nombre.");
+      toast.error("Por favor ingrese el código y el nombre.");
       return;
     }
-    try {
-      await inventarioService.guardarParametro({
+    
+    toast.promise(
+      inventarioService.guardarParametro({
         codigo: nuevoParametro.codigo.toUpperCase(),
         nombre: nuevoParametro.nombre,
-        estructuraCodigo: estructuraActiva
-      });
-      onParametrosChange(); 
-      setNuevoParametro({ nombre: '', codigo: '' });
-    } catch (err: any) {
-      alert("Error al guardar el parámetro. Es posible que el código ya exista.");
-    }
+        estructuraCodigo: estructuraActiva,
+        empresaId: empresaId // Ahora sí existe y no dará error
+      }),
+      {
+        loading: 'Guardando parámetro...',
+        success: () => {
+          onParametrosChange(); 
+          setNuevoParametro({ nombre: '', codigo: '' });
+          return 'Parámetro guardado con éxito';
+        },
+        error: (err) => err.response?.data?.error || err.message || "Error al guardar el parámetro."
+      }
+    );
   };
 
+  // 🔥 ACTUALIZACIÓN: Usamos toast.promise para la eliminación también
   const confirmarEliminacion = async () => {
-    try {
-      await inventarioService.eliminarParametro(confirmDialog.id);
-      onParametrosChange();
-      setConfirmDialog({ isOpen: false, id: 0, nombre: '' });
-    } catch (err: any) {
-      alert(err.response?.data?.error || "Error al eliminar. Es posible que esté en uso.");
-      setConfirmDialog({ isOpen: false, id: 0, nombre: '' });
-    }
+    toast.promise(
+      inventarioService.eliminarParametro(confirmDialog.id),
+      {
+        loading: 'Eliminando...',
+        success: () => {
+          onParametrosChange();
+          setConfirmDialog({ isOpen: false, id: 0, nombre: '' });
+          return 'Eliminado correctamente';
+        },
+        error: (err) => {
+          setConfirmDialog({ isOpen: false, id: 0, nombre: '' });
+          return err.response?.data?.error || "No se puede eliminar. Es posible que esté en uso.";
+        }
+      }
+    );
   };
 
   const parametrosActuales = estructuraActiva === 'CAT_PROD' ? categorias : unidades;

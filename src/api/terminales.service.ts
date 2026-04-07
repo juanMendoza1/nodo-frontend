@@ -15,11 +15,8 @@ export const terminalesService = {
     return response.data.tokenRegistro; 
   },
 
-  // 🔥 NUEVO: Obtener los cupos de la suscripción
-  obtenerCupos: async (empresaId: number, programaCod: string) => {
-    const response = await api.get('/api/terminales/cupos-disponibles', {
-      params: { empresaId, programaCod }
-    });
-    return response.data; // Devuelve: { maxDispositivos, dispositivosActivos, disponibles }
+  obtenerCuposEmpresa: async (empresaId: number) => {
+    const response = await api.get(`/api/terminales/cupos-empresa/${empresaId}`);
+    return response.data; // Devuelve un array con todos los programas
   }
 };

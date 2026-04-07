@@ -1,10 +1,10 @@
-// src/pages/Admin/views/ConfiguracionMaster.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Layers, ListTree, Hash, Shield, 
   Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown, Store
 } from 'lucide-react';
 import { configuracionService } from '../../../api/configuracion.service';
+import toast from 'react-hot-toast'; // 🔥 IMPORTAMOS TOAST
 
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loading }: any) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -210,9 +210,11 @@ export default function ConfiguracionMaster() {
     setFormData({ ...formData, [key]: value });
   };
 
+  // 🔥 ACTUALIZACIÓN: Usamos toast.promise para manejar el submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
+    
+    const guardarPromise = (async () => {
       let payload = { ...formData };
       
       if (activeTab === 'estructuras' && payload.claseId) payload.clase = { id: Number(payload.claseId) };
@@ -230,21 +232,31 @@ export default function ConfiguracionMaster() {
       } else {
         await configuracionService.crear(tabActivo.endpoint, payload);
       }
+      
       handleCloseDrawer();
-      cargarDatos();
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Error al guardar');
-    }
+      await cargarDatos();
+    })();
+
+    toast.promise(guardarPromise, {
+      loading: 'Guardando registro...',
+      success: '¡Registro guardado con éxito!',
+      error: (err) => err.response?.data?.message || 'Error al guardar el registro'
+    });
   };
 
+  // 🔥 ACTUALIZACIÓN: Usamos toast.promise para manejar el borrado
   const handleDelete = async (id: number) => {
     if (window.confirm(`¿Estás seguro de eliminar este registro de ${tabActivo.title}?`)) {
-      try {
+      const eliminarPromise = (async () => {
         await configuracionService.eliminar(tabActivo.endpoint, id);
-        cargarDatos();
-      } catch (error: any) {
-        alert(error.response?.data?.message || "No se puede eliminar porque está en uso por otros registros.");
-      }
+        await cargarDatos();
+      })();
+
+      toast.promise(eliminarPromise, {
+        loading: 'Eliminando...',
+        success: 'Registro eliminado correctamente',
+        error: (err) => err.response?.data?.message || "No se puede eliminar porque está en uso por otros registros."
+      });
     }
   };
 

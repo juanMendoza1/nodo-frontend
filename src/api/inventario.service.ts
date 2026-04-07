@@ -7,7 +7,7 @@ export const inventarioService = {
     return response.data;
   },
   
-  guardarParametro: async (parametro: { id?: number, codigo: string, nombre: string, estructuraCodigo: string }): Promise<void> => {
+  guardarParametro: async (parametro: { id?: number, codigo: string, nombre: string, estructuraCodigo: string, empresaId: number }): Promise<void> => {
     await api.post('/api/unidades', parametro);
   },
 
@@ -24,9 +24,8 @@ export const inventarioService = {
     await api.put(`/api/productos/${productoId}/estado`);
   },
 
-  // Busca los parámetros dinámicos (Ej: "CAT_PROD" o "UNI_MED")
-  obtenerParametrosPorEstructura: async (codigoEstructura: string): Promise<UnidadParametro[]> => {
-    const response = await api.get<UnidadParametro[]>(`/api/unidades/estructura/${codigoEstructura}`);
+  obtenerParametrosPorEstructura: async (codigoEstructura: string, empresaId: number): Promise<UnidadParametro[]> => {
+    const response = await api.get<UnidadParametro[]>(`/api/unidades/estructura/${codigoEstructura}/empresa/${empresaId}`);
     return response.data;
   },
 

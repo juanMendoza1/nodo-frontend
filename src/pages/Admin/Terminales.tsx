@@ -1,15 +1,8 @@
+// src/pages/Admin/Terminales.tsx
 import React, { useState, useEffect } from 'react';
 import { 
-  MonitorSmartphone, 
-  Plus, 
-  Wifi, 
-  MoreVertical, 
-  Tablet, 
-  X,
-  RefreshCw,
-  ServerCrash,
-  CreditCard,
-  CheckCircle2
+  MonitorSmartphone, Plus, Wifi, MoreVertical, Tablet, X,
+  RefreshCw, ServerCrash, CreditCard, CheckCircle2, Cpu
 } from 'lucide-react';
 import { terminalesService } from '../../api/terminales.service';
 import type { Terminal } from '../../types/terminales.types';
@@ -21,13 +14,13 @@ interface TerminalesProps {
 export default function Terminales({ empresaId }: TerminalesProps) {
   const [terminales, setTerminales] = useState<Terminal[]>([]);
   
-  // 🔥 ESTADO DE LOS CUPOS
-  const [cupos, setCupos] = useState({ maxDispositivos: 0, dispositivosActivos: 0, disponibles: 0 });
+  // 🔥 ESTADOS DINÁMICOS PARA PROGRAMAS
+  const [programas, setProgramas] = useState<any[]>([]);
+  const [programaSeleccionado, setProgramaSeleccionado] = useState<string>('');
   
   const [loading, setLoading] = useState(true);
   const [errorBackend, setErrorBackend] = useState(false);
   
-  // Estados para el Modal del QR
   const [modalOpen, setModalOpen] = useState(false);
   const [tokenQr, setTokenQr] = useState<string | null>(null); 
   const [loadingQr, setLoadingQr] = useState(false);
@@ -41,47 +34,49 @@ export default function Terminales({ empresaId }: TerminalesProps) {
       setLoading(true);
       setErrorBackend(false);
       
-      // Consultamos las terminales y los cupos en paralelo
       const [dataTerminales, dataCupos] = await Promise.all([
         terminalesService.obtenerTerminales(empresaId),
-        terminalesService.obtenerCupos(empresaId, 'INV') // 'INV' o 'POS' según tu lógica base
+        terminalesService.obtenerCuposEmpresa(empresaId) // 🔥 Llama al nuevo endpoint
       ]);
 
       setTerminales(dataTerminales);
-      setCupos(dataCupos);
+      setProgramas(dataCupos);
+      
+      // Si tiene programas, seleccionamos el primero por defecto
+      if (dataCupos.length > 0 && !programaSeleccionado) {
+        setProgramaSeleccionado(dataCupos[0].programaCod);
+      }
     } catch (error: any) {
       console.error("Error al cargar datos de terminales", error);
-      if (error.response?.status === 403 || error.response?.status === 404 || error.response?.status === 400) {
-        setErrorBackend(true);
-      }
+      setErrorBackend(true);
     } finally {
       setLoading(false);
     }
   };
 
   const abrirModalQr = async () => {
+    if (!programaSeleccionado) return;
+    
     setModalOpen(true);
     setLoadingQr(true);
     setTokenQr(null);
     
     try {
-      const tokenDesdeBackend = await terminalesService.generarQrActivacion(empresaId, 'INV');
+      // 🔥 Pasamos el programa dinámico
+      const tokenDesdeBackend = await terminalesService.generarQrActivacion(empresaId, programaSeleccionado);
       setTokenQr(tokenDesdeBackend);
     } catch (error) {
       console.error("Error generando token", error);
-      alert("Hubo un error al generar el token de autorización.");
+      alert("Hubo un error al generar el token de autorización o no hay cupos.");
       setModalOpen(false);
     } finally {
       setLoadingQr(false);
     }
   };
 
-  const solicitarMasTerminales = () => {
-    // Aquí puedes redirigir a un modal de pago, WhatsApp o formulario de contacto
-    alert("Redirigiendo a opciones de mejora de plan...");
-  };
-
-  const tieneCupo = cupos.disponibles > 0;
+  // Buscamos los cupos del programa actualmente seleccionado en la UI
+  const cuposActuales = programas.find(p => p.programaCod === programaSeleccionado) || { maxDispositivos: 0, dispositivosActivos: 0, disponibles: 0 };
+  const tieneCupo = cuposActuales.disponibles > 0;
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -93,42 +88,61 @@ export default function Terminales({ empresaId }: TerminalesProps) {
             Terminales y Dispositivos
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Gestiona las tablets operativas, visualiza su estado y controla tus licencias.
+            Gestiona las tablets operativas y controla tus licencias por módulo.
           </p>
         </div>
         
-        {/* 🔥 BOTONERA INTELIGENTE BASADA EN CUPOS */}
-        <div className="flex items-center">
-          {tieneCupo ? (
+        {/* 🔥 SELECTOR DINÁMICO DE PROGRAMA Y BOTONERA */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          
+          {programas.length > 0 && (
+            <div className="relative w-full sm:w-auto">
+              <Cpu className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <select 
+                value={programaSeleccionado}
+                onChange={(e) => setProgramaSeleccionado(e.target.value)}
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none shadow-sm cursor-pointer"
+              >
+                {programas.map(p => (
+                  <option key={p.programaCod} value={p.programaCod}>
+                    Módulo: {p.programaNombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {programas.length === 0 ? (
+             <div className="px-4 py-2.5 bg-red-50 text-red-600 text-sm font-bold rounded-xl border border-red-100">
+               No hay suscripciones
+             </div>
+          ) : tieneCupo ? (
             <button 
               onClick={abrirModalQr}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-600/20 transition-all"
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-600/20 transition-all w-full sm:w-auto shrink-0"
             >
-              <Plus className="w-4 h-4" /> Registrar Nueva Terminal
+              <Plus className="w-4 h-4" /> Registrar Terminal
             </button>
           ) : (
-            <div className="flex bg-gray-100 rounded-xl p-1 shadow-inner border border-gray-200">
+            <div className="flex bg-gray-100 rounded-xl p-1 shadow-inner border border-gray-200 w-full sm:w-auto">
               <span className="flex items-center px-4 py-2 text-sm font-bold text-gray-400 cursor-not-allowed">
                 Sin cupos
               </span>
-              <button 
-                onClick={solicitarMasTerminales}
-                className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 text-sm font-bold rounded-lg shadow-sm hover:text-blue-700 transition-all border border-gray-200"
-              >
-                <CreditCard className="w-4 h-4" /> Ampliar Plan
+              <button className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 text-sm font-bold rounded-lg shadow-sm hover:text-blue-700 transition-all border border-gray-200">
+                <CreditCard className="w-4 h-4" /> Ampliar
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* 🔥 INDICADORES DE CUPOS (NUEVO WIDGET) */}
-      {!errorBackend && !loading && (
+      {/* INDICADORES DE CUPOS DINÁMICOS */}
+      {!errorBackend && !loading && programas.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Licencias</p>
-              <p className="text-3xl font-extrabold text-gray-900">{cupos.maxDispositivos}</p>
+              <p className="text-3xl font-extrabold text-gray-900">{cuposActuales.maxDispositivos}</p>
             </div>
             <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center">
               <MonitorSmartphone className="w-6 h-6 text-gray-400" />
@@ -139,7 +153,7 @@ export default function Terminales({ empresaId }: TerminalesProps) {
             <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -z-0"></div>
             <div className="relative z-10">
               <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">Equipos en Uso</p>
-              <p className="text-3xl font-extrabold text-blue-600">{cupos.dispositivosActivos}</p>
+              <p className="text-3xl font-extrabold text-blue-600">{cuposActuales.dispositivosActivos}</p>
             </div>
           </div>
 
@@ -147,7 +161,7 @@ export default function Terminales({ empresaId }: TerminalesProps) {
              <div className={`absolute top-0 right-0 w-16 h-16 rounded-bl-full -z-0 ${tieneCupo ? 'bg-emerald-50' : 'bg-red-50'}`}></div>
             <div className="relative z-10">
               <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${tieneCupo ? 'text-emerald-500' : 'text-red-500'}`}>Cupos Libres</p>
-              <p className={`text-3xl font-extrabold ${tieneCupo ? 'text-emerald-600' : 'text-red-600'}`}>{cupos.disponibles}</p>
+              <p className={`text-3xl font-extrabold ${tieneCupo ? 'text-emerald-600' : 'text-red-600'}`}>{cuposActuales.disponibles}</p>
             </div>
              <div className="relative z-10">
                {tieneCupo ? <CheckCircle2 className="w-8 h-8 text-emerald-400 opacity-50" /> : <X className="w-8 h-8 text-red-400 opacity-50" />}
@@ -156,20 +170,26 @@ export default function Terminales({ empresaId }: TerminalesProps) {
         </div>
       )}
 
+      {/* ESTADO DE CARGA O ERROR */}
       {loading ? (
         <div className="text-center py-20 text-gray-500 font-medium animate-pulse">Cargando infraestructura...</div>
       ) : errorBackend ? (
         <div className="text-center py-20 bg-white rounded-2xl border border-red-100 shadow-sm">
           <ServerCrash className="w-12 h-12 text-red-400 mx-auto mb-3" />
           <p className="text-red-600 font-bold text-lg">Error de conexión</p>
-          <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
-            Asegúrate de que la suscripción de la empresa esté activa y configurada correctamente en el backend.
+        </div>
+      ) : programas.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300 shadow-sm">
+          <Cpu className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-bold mb-2 text-lg">No tienes módulos contratados.</p>
+          <p className="text-gray-400 text-sm max-w-md mx-auto">
+            Contacta al SuperAdmin para que te asigne una licencia de sistema (Ej. Punto de Venta o Inventario).
           </p>
         </div>
-      ) : terminales.length === 0 ? (
+      ) : terminales.filter(t => t.programa?.codigo === programaSeleccionado).length === 0 ? (
         <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
           <Tablet className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 font-bold mb-2">No tienes terminales registradas.</p>
+          <p className="text-gray-500 font-bold mb-2">No tienes terminales registradas en este módulo.</p>
           {tieneCupo && (
              <button onClick={abrirModalQr} className="text-emerald-600 font-bold text-sm hover:underline">
                Haz clic aquí para vincular tu primer equipo
@@ -178,7 +198,7 @@ export default function Terminales({ empresaId }: TerminalesProps) {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {terminales.map((terminal: any) => (
+          {terminales.filter(t => t.programa?.codigo === programaSeleccionado).map((terminal: any) => (
             <div key={terminal.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all relative group flex flex-col h-full">
               <div className="flex justify-between items-start mb-4">
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-600">
@@ -210,7 +230,7 @@ export default function Terminales({ empresaId }: TerminalesProps) {
         </div>
       )}
 
-      {/* MODAL DEL QR (Se mantiene igual, solo ajusté estilos menores) */}
+      {/* MODAL DEL QR */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -222,7 +242,7 @@ export default function Terminales({ empresaId }: TerminalesProps) {
             </div>
             
             <div className="p-8 text-center">
-              <p className="text-xs text-gray-500 font-medium mb-6">Escanea este código desde la App TPV Nodo para enlazar la tablet.</p>
+              <p className="text-xs text-gray-500 font-medium mb-6">Escanea este código desde la App TPV Nodo para enlazar la tablet al módulo <strong className="text-gray-900">{programaSeleccionado}</strong>.</p>
               
               <div className="mx-auto w-48 h-48 bg-white border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center mb-6 relative overflow-hidden">
                 {loadingQr ? (
@@ -239,13 +259,6 @@ export default function Terminales({ empresaId }: TerminalesProps) {
                   <span className="text-red-500 font-bold text-xs">Error al generar</span>
                 )}
               </div>
-
-              {!loadingQr && tokenQr && (
-                <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
-                  <p className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-widest">Código Activo</p>
-                  <p className="text-xs text-gray-600 mt-1 font-medium">Cerrará automáticamente tras el primer uso.</p>
-                </div>
-              )}
             </div>
           </div>
         </div>

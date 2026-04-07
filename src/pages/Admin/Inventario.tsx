@@ -52,8 +52,9 @@ export default function Inventario({ empresaId }: InventarioProps) {
   const cargarParametros = async () => {
     try {
       const [cats, unids] = await Promise.all([
-        inventarioService.obtenerParametrosPorEstructura('CAT_PROD'),
-        inventarioService.obtenerParametrosPorEstructura('UNI_MED')
+        // 🔥 AQUÍ PASAMOS LA EMPRESA AL LLAMAR LA API
+        inventarioService.obtenerParametrosPorEstructura('CAT_PROD', empresaId),
+        inventarioService.obtenerParametrosPorEstructura('UNI_MED', empresaId)
       ]);
       setCategorias(cats);
       setUnidades(unids);
@@ -208,6 +209,7 @@ export default function Inventario({ empresaId }: InventarioProps) {
         onClose={() => setIsParametrosOpen(false)} 
         categorias={categorias} 
         unidades={unidades} 
+        empresaId={empresaId}
         onParametrosChange={cargarParametros} 
       />
 

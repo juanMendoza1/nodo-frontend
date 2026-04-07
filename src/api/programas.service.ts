@@ -7,6 +7,8 @@ export interface ProgramaData {
   descripcion?: string;
   version?: string;
   activo: boolean;
+  permisosIds?: number[]; 
+  permisosCodigos?: string[];
 }
 
 export const programasService = {
