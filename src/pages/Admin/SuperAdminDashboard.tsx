@@ -9,6 +9,7 @@ import ConfiguracionMaster from './views/ConfiguracionMaster';
 import EmpresasManager from './views/EmpresasManager';
 import ProgramasManager from './views/ProgramasManager';
 import UsuariosManager from './views/UsuariosManager';
+import SuscripcionesManager from './views/SuscripcionesManager';
 
 // ============================================================================
 // COMPONENTE GENÉRICO TEMPORAL (Solo para Usuarios y Suscripciones por ahora)
@@ -171,15 +172,7 @@ export default function SuperAdminDashboard() {
           {/* MÓDULOS PENDIENTES DE VISTA PROPIA */}
           {activeTab === 'usuarios' && <UsuariosManager />}
 
-          {activeTab === 'suscripciones' && (
-            <MasterTable 
-              title="Suscripciones / Licencias" 
-              description="Módulos (Programas) contratados por las empresas y límites de dispositivos."
-              icon={CreditCard}
-              columns={['Empresa', 'Programa', 'Dispositivos (Activos/Max)', 'F. Vencimiento', 'Estado', 'Acciones']}
-              data={[]} onAdd={() => console.log('Nueva Suscripción')}
-            />
-          )}
+          {activeTab === 'suscripciones' && <SuscripcionesManager />}
           {activeTab === 'programas' && <ProgramasManager />}
 
         </div>

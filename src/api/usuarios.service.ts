@@ -7,6 +7,7 @@ export interface UsuarioData {
   estado: string;    // Manejará el Enum (ACTIVO, INACTIVO, BLOQUEADO)
   tercero?: { id: number };
   empresa?: { id: number };
+  rolId?: number;
 }
 
 export const usuariosService = {

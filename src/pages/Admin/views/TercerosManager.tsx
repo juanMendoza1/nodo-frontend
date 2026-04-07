@@ -83,7 +83,7 @@ export default function TercerosManager() {
         await tercerosService.crear(
           formData, 
           usuarioData.empresaId || 1, 
-          usuarioData.id,             
+          usuarioData.usuarioId,             
           esSuperAdmin                
         );
       }

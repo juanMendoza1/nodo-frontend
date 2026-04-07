@@ -6,6 +6,7 @@ import {
 import { usuariosService, type UsuarioData } from '../../../api/usuarios.service';
 import { tercerosService } from '../../../api/terceros.service';
 import { empresasService } from '../../../api/empresas.service';
+import api from '../../../api/axios.config'; // 🔥 IMPORTANTE: Necesario para traer los roles
 
 // ============================================================================
 // COMPONENTE: SELECT BUSCADOR INTELIGENTE (Combobox)
@@ -37,7 +38,7 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loa
           {selectedOption 
             ? isEmpresa 
                 ? selectedOption.nombreComercial 
-                : `${selectedOption.nombreCompleto || selectedOption.nombre} (${selectedOption.documento})` 
+                : `${selectedOption.nombreCompleto || selectedOption.nombre} ${selectedOption.documento ? `(${selectedOption.documento})` : ''}` 
             : placeholder}
         </span>
         {loading ? <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" /> : <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
@@ -105,6 +106,7 @@ export default function UsuariosManager() {
   // Listas paramétricas para el formulario
   const [terceros, setTerceros] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]); // 🔥 ESTADO DE ROLES AÑADIDO
   const [loadingOptions, setLoadingOptions] = useState(false);
 
   // Estados del Drawer
@@ -115,14 +117,12 @@ export default function UsuariosManager() {
   const formatearFecha = (fecha: any) => {
     if (!fecha) return '---';
     try {
-      // Si Spring Boot lo manda como array [Año, Mes, Día, Hora, Minuto]
       if (Array.isArray(fecha)) {
         const [year, month, day] = fecha;
         return new Date(year, month - 1, day).toLocaleDateString('es-CO', {
           year: 'numeric', month: '2-digit', day: '2-digit'
         });
       }
-      // Si lo manda como String ISO
       return new Date(fecha).toLocaleDateString('es-CO', {
         year: 'numeric', month: '2-digit', day: '2-digit'
       });
@@ -151,12 +151,15 @@ export default function UsuariosManager() {
   const cargarOpcionesFormulario = async () => {
     setLoadingOptions(true);
     try {
-      const [tercerosRes, empresasRes] = await Promise.all([
+      // 🔥 AHORA CARGAMOS TAMBIÉN LOS ROLES
+      const [tercerosRes, empresasRes, rolesRes] = await Promise.all([
         tercerosService.obtenerTodosAdmin(),
-        empresasService.obtenerTodas()
+        empresasService.obtenerTodas(),
+        api.get('/api/roles').then(r => r.data)
       ]);
       setTerceros(tercerosRes || []);
       setEmpresas(empresasRes || []);
+      setRoles(rolesRes || []);
     } catch (error) {
       console.error("Error cargando opciones:", error);
     } finally {
@@ -174,11 +177,12 @@ export default function UsuariosManager() {
         estado: usuario.estado || 'ACTIVO',
         terceroId: usuario.tercero?.id || '',
         empresaId: usuario.empresa?.id || '',
-        password: '' // No traemos el password por seguridad
+        rolId: '', // 🔥 CAMPO DE ROL AÑADIDO
+        password: '' 
       });
     } else {
       setEditingId(null);
-      setFormData({ login: '', estado: 'ACTIVO', terceroId: '', empresaId: '', password: '' });
+      setFormData({ login: '', estado: 'ACTIVO', terceroId: '', empresaId: '', rolId: '', password: '' });
     }
     setIsDrawerOpen(true);
   };
@@ -196,9 +200,9 @@ export default function UsuariosManager() {
         estado: formData.estado,
         tercero: formData.terceroId ? { id: Number(formData.terceroId) } : undefined,
         empresa: formData.empresaId ? { id: Number(formData.empresaId) } : undefined,
+        rolId: formData.rolId ? Number(formData.rolId) : undefined // 🔥 ROL INCLUIDO EN EL PAYLOAD
       };
 
-      // Solo mandamos el password si lo escribieron (para creaciones o cambios)
       if (formData.password && formData.password.trim() !== '') {
         payload.password = formData.password;
       }
@@ -278,14 +282,14 @@ export default function UsuariosManager() {
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center">
+                  <td colSpan={6} className="p-12 text-center">
                     <Loader2 className="w-8 h-8 text-black animate-spin mx-auto mb-3" />
                     <p className="text-zinc-500 font-bold text-sm">Cargando directorio de accesos...</p>
                   </td>
                 </tr>
               ) : filteredUsuarios.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center">
+                  <td colSpan={6} className="p-12 text-center">
                     <ShieldCheck className="w-8 h-8 text-zinc-300 mx-auto mb-3" />
                     <p className="text-zinc-500 font-bold text-sm">No se encontraron usuarios.</p>
                   </td>
@@ -416,6 +420,18 @@ export default function UsuariosManager() {
               />
             </div>
 
+            {/* 🔥 NUEVO SELECT DE ROLES */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Rol del Usuario *</label>
+              <SearchableSelect 
+                value={formData.rolId}
+                options={roles}
+                onChange={(val: any) => setFormData({...formData, rolId: val})}
+                placeholder="Seleccionar Rol (Ej. ADMIN)"
+                loading={loadingOptions}
+              />
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Estado de la Cuenta *</label>
               <select
@@ -446,7 +462,7 @@ export default function UsuariosManager() {
             <button 
               type="submit" 
               form="usuarioForm"
-              disabled={!formData.login || !formData.terceroId || !formData.empresaId}
+              disabled={!formData.login || !formData.terceroId || !formData.empresaId || !formData.rolId}
               className="flex-1 px-4 py-3 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 shadow-md hover:shadow-lg transition-all text-sm flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4" /> {editingId ? 'Actualizar' : 'Guardar Credenciales'}

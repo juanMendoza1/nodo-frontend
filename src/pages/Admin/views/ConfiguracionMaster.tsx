@@ -1,13 +1,11 @@
+// src/pages/Admin/views/ConfiguracionMaster.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Layers, ListTree, Hash, Shield, 
-  Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown,Store
+  Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown, Store
 } from 'lucide-react';
 import { configuracionService } from '../../../api/configuracion.service';
 
-// ============================================================================
-// COMPONENTE: SELECT BUSCADOR INTELIGENTE (Combobox)
-// ============================================================================
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loading }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,7 +19,6 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loa
 
   return (
     <div className="relative w-full">
-      {/* Input visual / Botón que abre el menú */}
       <div 
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium flex items-center justify-between transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-100 focus:border-black focus:ring-1 focus:ring-black'}`}
@@ -32,7 +29,6 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loa
         {loading ? <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" /> : <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />}
       </div>
 
-      {/* Menú desplegable con Buscador */}
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
@@ -78,16 +74,13 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loa
   );
 };
 
-// ============================================================================
-// DICCIONARIO INTELIGENTE
-// ============================================================================
 const TABS_CONFIG: Record<string, any> = {
   clases: {
     endpoint: 'clases',
     title: 'Clases',
     desc: 'Módulos o agrupadores principales.',
     icon: Layers,
-    columns: ['ID', 'Código', 'Nombre', 'Estado'],
+    columns: ['ID', 'Código', 'Nombre', 'Descripción', 'Estado'],
     fields: [
       { key: 'codigo', label: 'Código de Sistema', type: 'text', placeholder: 'Ej. INV' },
       { key: 'nombre', label: 'Nombre de la Clase', type: 'text', placeholder: 'Ej. INVENTARIO' },
@@ -101,10 +94,8 @@ const TABS_CONFIG: Record<string, any> = {
     icon: ListTree,
     columns: ['ID', 'Código', 'Nombre', 'Clase (Padre)', 'Estado'],
     fields: [
-      // 🔥 AÑADIDO: Ahora pide el código correctamente para la base de datos
       { key: 'codigo', label: 'Código Interno', type: 'text', placeholder: 'Ej. TIP_IDENTIFICACION' },
       { key: 'nombre', label: 'Nombre de la Estructura', type: 'text', placeholder: 'Ej. TIPOS DE IDENTIFICACIÓN' },
-      // 🔥 MAGIA: Usa nuestro nuevo componente buscador
       { key: 'claseId', label: 'Clase a la que pertenece', type: 'searchable-select', parentEndpoint: 'clases', placeholder: 'Seleccionar Clase Padre' }
     ]
   },
@@ -125,14 +116,14 @@ const TABS_CONFIG: Record<string, any> = {
     title: 'Roles de Sistema',
     desc: 'Perfiles de acceso para los usuarios.',
     icon: Shield,
-    columns: ['ID', 'Nombre del Rol', 'Estado'],
+    columns: ['ID', 'Nombre del Rol', 'Descripción', 'Estado'],
     fields: [
       { key: 'nombre', label: 'Nombre del Rol', type: 'text', placeholder: 'Ej. ROLE_CAJERO' },
-      { key: 'descripcion', label: 'Descripción (Opcional)', type: 'text', placeholder: 'Permisos...' }
+      { key: 'descripcion', label: 'Descripción (Opcional)', type: 'text', placeholder: 'Permisos y funciones...' }
     ]
   },
   giros: {
-    endpoint: 'giros-negocio', // Asegúrate de crear luego un GiroNegocioController con este path
+    endpoint: 'giros-negocio', 
     title: 'Giros de Negocio',
     desc: 'Tipos de comercio y plantillas de la app.',
     icon: Store,
@@ -181,10 +172,9 @@ export default function ConfiguracionMaster() {
   const handleOpenDrawer = async (item?: any) => {
     if (item) {
       setEditingId(item.id);
+      // 🔥 MAGIA: Esparcimos todo el objeto 'item' para capturar templateMovil y descripcion solos
       setFormData({
-        codigo: item.codigo || '',
-        nombre: item.nombre,
-        descripcion: item.descripcion || '',
+        ...item,
         claseId: item.clase?.id || '',
         estructuraId: item.estructura?.id || '',
         activo: item.activo !== false
@@ -201,7 +191,6 @@ export default function ConfiguracionMaster() {
         const optionsData = await configuracionService.obtenerTodos(selectField.parentEndpoint);
         setParentOptions(optionsData || []);
       } catch (error) {
-        console.error(`Error cargando ${selectField.parentEndpoint}`);
         setParentOptions([]);
       } finally {
         setLoadingOptions(false);
@@ -229,7 +218,6 @@ export default function ConfiguracionMaster() {
       if (activeTab === 'estructuras' && payload.claseId) payload.clase = { id: Number(payload.claseId) };
       
       if (activeTab === 'unidades' && payload.estructuraId) {
-         // Asegurar que también enviamos estructuraCodigo para tu UnidadDTO
          const estSeleccionada = parentOptions.find((opt: any) => opt.id.toString() === payload.estructuraId.toString());
          if (estSeleccionada) {
              payload.estructuraCodigo = estSeleccionada.codigo;
@@ -254,8 +242,8 @@ export default function ConfiguracionMaster() {
       try {
         await configuracionService.eliminar(tabActivo.endpoint, id);
         cargarDatos();
-      } catch (error) {
-        alert("No se puede eliminar porque está en uso por otros registros.");
+      } catch (error: any) {
+        alert(error.response?.data?.message || "No se puede eliminar porque está en uso por otros registros.");
       }
     }
   };
@@ -274,7 +262,7 @@ export default function ConfiguracionMaster() {
           <Settings className="w-8 h-8 text-black" /> Motor de Parametrización
         </h2>
         <p className="text-sm text-zinc-500 font-medium mt-1">
-          Configura los catálogos, listas desplegables y variables del sistema dinámicamente.
+          Configura los catálogos, listas desplegables, y roles del sistema dinámicamente.
         </p>
       </div>
 
@@ -357,30 +345,62 @@ export default function ConfiguracionMaster() {
                     <tr key={i} className="hover:bg-zinc-50 transition-colors group">
                       <td className="p-4 pl-6 text-sm font-black text-zinc-400">#{item.id}</td>
                       
-                      <td className="p-4 text-[11px] font-black text-zinc-800 uppercase tracking-widest">{item.codigo || '---'}</td>
-                      <td className="p-4 text-sm font-bold text-zinc-900">{item.nombre}</td>
+                      {/* 🔥 RENDERIZADO DINÁMICO DE COLUMNAS SEGÚN LA PESTAÑA */}
                       
                       {activeTab === 'clases' && (
-                        <td className="p-4 text-[12px] font-medium text-zinc-500">{item.descripcion || '---'}</td>
+                        <>
+                          <td className="p-4 text-[11px] font-black text-zinc-800 uppercase tracking-widest">{item.codigo}</td>
+                          <td className="p-4 text-sm font-bold text-zinc-900">{item.nombre}</td>
+                          <td className="p-4 text-[12px] font-medium text-zinc-500">{item.descripcion || '---'}</td>
+                        </>
                       )}
-                      
+
                       {activeTab === 'estructuras' && (
-                        <td className="p-4">
-                          <span className="text-[10px] font-extrabold text-zinc-600 bg-zinc-100 px-2.5 py-1.5 rounded-md uppercase tracking-wider border border-zinc-200">
-                            {item.clase?.nombre || 'N/A'}
-                          </span>
-                        </td>
+                        <>
+                          <td className="p-4 text-[11px] font-black text-zinc-800 uppercase tracking-widest">{item.codigo}</td>
+                          <td className="p-4 text-sm font-bold text-zinc-900">{item.nombre}</td>
+                          <td className="p-4">
+                            <span className="text-[10px] font-extrabold text-zinc-600 bg-zinc-100 px-2.5 py-1.5 rounded-md uppercase tracking-wider border border-zinc-200">
+                              {item.clase?.nombre || 'N/A'}
+                            </span>
+                          </td>
+                        </>
                       )}
+
                       {activeTab === 'unidades' && (
-                        <td className="p-4">
-                          <span className="text-[10px] font-extrabold text-zinc-600 bg-zinc-100 px-2.5 py-1.5 rounded-md uppercase tracking-wider border border-zinc-200">
-                            {item.estructura?.nombre || 'N/A'}
-                          </span>
-                        </td>
+                        <>
+                          <td className="p-4 text-[11px] font-black text-zinc-800 uppercase tracking-widest">{item.codigo}</td>
+                          <td className="p-4 text-sm font-bold text-zinc-900">{item.nombre}</td>
+                          <td className="p-4">
+                            <span className="text-[10px] font-extrabold text-zinc-600 bg-zinc-100 px-2.5 py-1.5 rounded-md uppercase tracking-wider border border-zinc-200">
+                              {item.estructura?.nombre || 'N/A'}
+                            </span>
+                          </td>
+                        </>
+                      )}
+
+                      {activeTab === 'roles' && (
+                        <>
+                          <td className="p-4 text-sm font-bold text-zinc-900">{item.nombre}</td>
+                          <td className="p-4 text-[12px] font-medium text-zinc-500">{item.descripcion || '---'}</td>
+                        </>
+                      )}
+
+                      {activeTab === 'giros' && (
+                        <>
+                          <td className="p-4 text-[11px] font-black text-zinc-800 uppercase tracking-widest">{item.codigo}</td>
+                          <td className="p-4 text-sm font-bold text-zinc-900">{item.nombre}</td>
+                          <td className="p-4">
+                            <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-1.5 rounded-md">
+                              {item.templateMovil || 'ESTANDAR'}
+                            </span>
+                          </td>
+                        </>
                       )}
                       
+                      {/* Estado Genérico para todos */}
                       <td className="p-4">
-                        <span className={`flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest ${item.activo !== false ? 'text-emerald-600' : 'text-red-500'}`}>
+                        <span className={`flex items-center gap-1.5 w-max text-[10px] font-extrabold uppercase tracking-widest ${item.activo !== false ? 'text-emerald-600' : 'text-red-500'}`}>
                           <span className={`w-2 h-2 rounded-full ${item.activo !== false ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
                           {item.activo !== false ? 'Activo' : 'Inactivo'}
                         </span>
@@ -429,10 +449,9 @@ export default function ConfiguracionMaster() {
             {tabActivo.fields.map((field: any, i: number) => (
               <div key={i} className="space-y-1.5">
                 <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center justify-between">
-                  <span>{field.label} {field.key === 'codigo' || field.key === 'nombre' ? '*' : ''}</span>
+                  <span>{field.label} {(field.key === 'codigo' || field.key === 'nombre') && activeTab !== 'roles' ? '*' : ''}</span>
                 </label>
                 
-                {/* NUESTRO NUEVO COMPONENTE */}
                 {field.type === 'searchable-select' ? (
                   <SearchableSelect 
                     value={formData[field.key]}
@@ -443,11 +462,11 @@ export default function ConfiguracionMaster() {
                   />
                 ) : (
                   <input 
-                    required={field.key === 'codigo' || field.key === 'nombre'}
+                    required={(field.key === 'codigo' && activeTab !== 'roles') || field.key === 'nombre'}
                     type={field.type} 
                     placeholder={field.placeholder}
                     value={formData[field.key] || ''}
-                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    onChange={(e) => handleChange(field.key, activeTab === 'roles' && field.key === 'nombre' ? e.target.value.toUpperCase() : e.target.value)}
                     className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all"
                   />
                 )}
