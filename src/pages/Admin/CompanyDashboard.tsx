@@ -5,7 +5,7 @@ import SockJS from 'sockjs-client';
 import { 
   LayoutDashboard, Package, Users, MonitorSmartphone, Settings, Bell, Search, 
   Menu, ArrowLeft, AlertTriangle, Store, Activity, RefreshCw, Clock, 
-  Wifi, WifiOff, Gamepad2, UserCircle2, Timer, ShieldCheck
+  Wifi, WifiOff, Gamepad2, UserCircle2, Timer, ShieldCheck,BadgeDollarSign
 } from 'lucide-react';
 
 import PersonalSlots from './PersonalSlots';
@@ -14,6 +14,7 @@ import Terminales from './Terminales';
 import { inventarioService } from '../../api/inventario.service';
 import type { DashboardStats } from '../../types/inventario.types';
 import MesaControlPanel from './components/MesaControlPanel';
+import LiquidacionSlotManager from './views/LiquidacionSlotManager';
 import api from '../../api/axios.config';
 
 // ============================================================================
@@ -539,6 +540,11 @@ export default function CompanyDashboard() {
               <MonitorSmartphone className="w-4 h-4" /> Terminales
             </button>
           )}
+          {tieneModulo('MOD_LIQUID_SLOT') && (
+            <button onClick={() => setActiveTab('liquidaciones')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'liquidaciones' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <BadgeDollarSign className="w-4 h-4" /> Nómina Slots
+            </button>
+          )}
 
           <div className="my-4 border-t border-gray-100"></div>
           
@@ -581,6 +587,7 @@ export default function CompanyDashboard() {
           {activeTab === 'personal' && tieneModulo('MOD_PERSONAL') && <PersonalSlots empresaId={empresaId} />}
           {activeTab === 'inventario' && tieneModulo('MOD_INVENTARIO') && <Inventario empresaId={empresaId} />}
           {activeTab === 'terminales' && tieneModulo('MOD_TABLETS') && <Terminales empresaId={empresaId} />}
+          {activeTab === 'liquidaciones' && tieneModulo('MOD_LIQUID_SLOT') && <LiquidacionSlotManager empresaId={empresaId} />}
           
           {/* Si no tiene nada */}
           {permisosUsuario.filter((p: string) => p.startsWith('MOD_')).length === 0 && !isSuperAdmin && (
