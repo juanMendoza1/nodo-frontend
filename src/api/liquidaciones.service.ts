@@ -8,9 +8,13 @@ export const liquidacionesService = {
     return response.data;
   },
 
-  // 2. Registrar Bonos o Descuentos
-  registrarNovedad: async (novedadData: any) => {
-    const response = await api.post('/api/liquidaciones/novedad', novedadData);
+  actualizarAcuerdo: async (id: number, acuerdoData: any) => {
+    const response = await api.put(`/api/liquidaciones/acuerdo/${id}`, acuerdoData);
+    return response.data;
+  },
+
+  registrarNovedad: async (acuerdoId: number, novedadData: any) => {
+    const response = await api.post(`/api/liquidaciones/novedad/acuerdo/${acuerdoId}`, novedadData);
     return response.data;
   },
 
@@ -45,5 +49,24 @@ export const liquidacionesService = {
       params: { empresaId, slotId, fechaInicio, fechaFin, adminId }
     });
     return response.data;
-  }
+  },
+
+  obtenerHistorialAcuerdos: async (slotId: number) => {
+    // Nota: Crearemos este endpoint en el backend luego
+    const response = await api.get(`/api/liquidaciones/acuerdos/historial/${slotId}`);
+    return response.data;
+  },
+
+  eliminarAcuerdo: async (acuerdoId: number) => {
+    const response = await api.delete(`/api/liquidaciones/acuerdo/${acuerdoId}`);
+    return response.data;
+  },
+  obtenerHistorialPagos: async (slotId: number) => {
+    const response = await api.get(`/api/liquidaciones/pagos/historial/${slotId}`);
+    return response.data;
+  },
+  obtenerNovedadesPendientes: async (acuerdoId: number) => {
+    const response = await api.get(`/api/liquidaciones/novedades/pendientes/acuerdo/${acuerdoId}`);
+    return response.data;
+  },
 };
