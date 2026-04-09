@@ -5,7 +5,7 @@ import SockJS from 'sockjs-client';
 import { 
   LayoutDashboard, Package, Users, MonitorSmartphone, Settings, Bell, Search, 
   Menu, ArrowLeft, AlertTriangle, Store, Activity, RefreshCw, Clock, 
-  Wifi, WifiOff, Gamepad2, UserCircle2, Timer, ShieldCheck,BadgeDollarSign
+  Wifi, WifiOff, Gamepad2, UserCircle2, Timer, ShieldCheck, BadgeDollarSign
 } from 'lucide-react';
 
 import PersonalSlots from './PersonalSlots';
@@ -16,6 +16,10 @@ import type { DashboardStats } from '../../types/inventario.types';
 import MesaControlPanel from './components/MesaControlPanel';
 import LiquidacionSlotManager from './views/LiquidacionSlotManager';
 import api from '../../api/axios.config';
+
+// 🔥 Nuevas importaciones de autenticación "Nivel Pro"
+import { usePermissions } from '../../hooks/usePermissions';
+import ModuleGuard from './components/auth/ModuleGuard';
 
 // ============================================================================
 // INTERFACES Y TIPOS
@@ -458,8 +462,8 @@ export default function CompanyDashboard() {
   const location = useLocation();
   const { id } = useParams(); 
   
-  const usuarioString = localStorage.getItem('usuario');
-  const usuarioData = usuarioString ? JSON.parse(usuarioString) : null;
+  // 🔥 Usamos nuestro hook nivel Pro
+  const { usuarioData, isSuperAdmin, hasModule, permisos } = usePermissions();
   
   const [usuario, setUsuario] = useState(usuarioData?.username || 'U');
   const [activeTab, setActiveTab] = useState('resumen');
@@ -467,28 +471,20 @@ export default function CompanyDashboard() {
   const empresaId = Number(id); 
   const nombreEmpresa = location.state?.empresaNombre || 'Negocio Seleccionado';
 
-  // 🔥 LÓGICA DE LEGOS: Verificamos qué permisos/módulos tiene el usuario
-  const permisosUsuario = usuarioData?.permisos || [];
-  const rolesUsuario = usuarioData?.roles || [];
-  const isSuperAdmin = rolesUsuario.includes('SUPER') || rolesUsuario.includes('ROLE_SUPER');
-
-  const tieneModulo = (modulo: string) => {
-    if (isSuperAdmin) return true; // El SuperAdmin ve todo para poder dar soporte
-    return permisosUsuario.includes(modulo);
-  };
-
-  // 🔥 Efecto para que, si no tiene "Caja", lo mande a Inventario o al que tenga por defecto
+  // Redirección inteligente inicial basada en permisos reales
   useEffect(() => {
     if (!usuarioData) {
       navigate('/');
       return;
     }
-    if (!tieneModulo('MOD_CAJA') && activeTab === 'resumen') {
-      if (tieneModulo('MOD_INVENTARIO')) setActiveTab('inventario');
-      else if (tieneModulo('MOD_PERSONAL')) setActiveTab('personal');
-      else if (tieneModulo('MOD_TABLETS')) setActiveTab('terminales');
+
+    if (activeTab === 'resumen' && !hasModule('MOD_CAJA')) {
+      if (hasModule('MOD_INVENTARIO')) setActiveTab('inventario');
+      else if (hasModule('MOD_PERSONAL')) setActiveTab('personal');
+      else if (hasModule('MOD_TABLETS')) setActiveTab('terminales');
+      else if (hasModule('MOD_LIQUID_SLOT')) setActiveTab('liquidaciones');
     }
-  }, [navigate, usuarioData, permisosUsuario, activeTab]);
+  }, [navigate, usuarioData, hasModule, activeTab]);
 
   if (!usuarioData || !empresaId || isNaN(empresaId)) return null; 
 
@@ -516,35 +512,37 @@ export default function CompanyDashboard() {
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
           <p className="px-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">Módulos Contratados</p>
           
-          {/* 🔥 DIBUJAMOS LOS BOTONES SOLO SI TIENE EL MÓDULO */}
-          {tieneModulo('MOD_CAJA') && (
+          {/* 🔥 DIBUJAMOS LOS BOTONES CON MODULE GUARD */}
+          
+          <ModuleGuard module="MOD_CAJA">
             <button onClick={() => setActiveTab('resumen')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'resumen' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
               <LayoutDashboard className="w-4 h-4" /> Panel de Caja
             </button>
-          )}
+          </ModuleGuard>
           
-          {tieneModulo('MOD_INVENTARIO') && (
+          <ModuleGuard module="MOD_INVENTARIO">
             <button onClick={() => setActiveTab('inventario')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'inventario' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
               <Package className="w-4 h-4" /> Inventario
             </button>
-          )}
+          </ModuleGuard>
           
-          {tieneModulo('MOD_PERSONAL') && (
+          <ModuleGuard module="MOD_PERSONAL">
             <button onClick={() => setActiveTab('personal')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'personal' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
               <Users className="w-4 h-4" /> Personal
             </button>
-          )}
+          </ModuleGuard>
           
-          {tieneModulo('MOD_TABLETS') && (
+          <ModuleGuard module="MOD_TABLETS">
             <button onClick={() => setActiveTab('terminales')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'terminales' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
               <MonitorSmartphone className="w-4 h-4" /> Terminales
             </button>
-          )}
-          {tieneModulo('MOD_LIQUID_SLOT') && (
+          </ModuleGuard>
+
+          <ModuleGuard module="MOD_LIQUID_SLOT">
             <button onClick={() => setActiveTab('liquidaciones')} className={`flex items-center w-full gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'liquidaciones' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-50'}`}>
               <BadgeDollarSign className="w-4 h-4" /> Nómina Slots
             </button>
-          )}
+          </ModuleGuard>
 
           <div className="my-4 border-t border-gray-100"></div>
           
@@ -583,14 +581,30 @@ export default function CompanyDashboard() {
 
         {/* CONTENIDO DINÁMICO */}
         <div className="flex-1 overflow-auto p-6 lg:p-8 bg-gray-50/50">
-          {activeTab === 'resumen' && tieneModulo('MOD_CAJA') && <ResumenDashboard empresaId={empresaId} />}
-          {activeTab === 'personal' && tieneModulo('MOD_PERSONAL') && <PersonalSlots empresaId={empresaId} />}
-          {activeTab === 'inventario' && tieneModulo('MOD_INVENTARIO') && <Inventario empresaId={empresaId} />}
-          {activeTab === 'terminales' && tieneModulo('MOD_TABLETS') && <Terminales empresaId={empresaId} />}
-          {activeTab === 'liquidaciones' && tieneModulo('MOD_LIQUID_SLOT') && <LiquidacionSlotManager empresaId={empresaId} />}
           
-          {/* Si no tiene nada */}
-          {permisosUsuario.filter((p: string) => p.startsWith('MOD_')).length === 0 && !isSuperAdmin && (
+          {/* 🔥 PROTEGEMOS CADA PANTALLA CON MODULE GUARD */}
+          <ModuleGuard module="MOD_CAJA">
+             {activeTab === 'resumen' && <ResumenDashboard empresaId={empresaId} />}
+          </ModuleGuard>
+
+          <ModuleGuard module="MOD_PERSONAL">
+             {activeTab === 'personal' && <PersonalSlots empresaId={empresaId} />}
+          </ModuleGuard>
+
+          <ModuleGuard module="MOD_INVENTARIO">
+             {activeTab === 'inventario' && <Inventario empresaId={empresaId} />}
+          </ModuleGuard>
+
+          <ModuleGuard module="MOD_TABLETS">
+             {activeTab === 'terminales' && <Terminales empresaId={empresaId} />}
+          </ModuleGuard>
+
+          <ModuleGuard module="MOD_LIQUID_SLOT">
+             {activeTab === 'liquidaciones' && <LiquidacionSlotManager empresaId={empresaId} />}
+          </ModuleGuard>
+          
+          {/* Vista para suscripciones inactivas / vacías */}
+          {!isSuperAdmin && permisos.filter((p: string) => p.startsWith('MOD_')).length === 0 && (
              <div className="flex flex-col items-center justify-center h-full text-center">
                  <ShieldCheck className="w-16 h-16 text-gray-300 mb-4" />
                  <h2 className="text-xl font-bold text-gray-900">Tu suscripción está inactiva</h2>
