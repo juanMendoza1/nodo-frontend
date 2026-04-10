@@ -69,4 +69,24 @@ export const liquidacionesService = {
     const response = await api.get(`/api/liquidaciones/novedades/pendientes/acuerdo/${acuerdoId}`);
     return response.data;
   },
+  crearPlantilla: async (data: any) => {
+    const response = await api.post('/api/config-liquidaciones/plantilla', data);
+    return response.data;
+  },
+  obtenerPlantillasPorPrograma: async (programaId: number) => {
+    const response = await api.get(`/api/config-liquidaciones/programa/${programaId}`);
+    return response.data;
+  },
+  configurarReceta: async (empresaId: number, data: any) => {
+    const response = await api.post(`/api/config-liquidaciones/empresa/${empresaId}/configurar`, data);
+    return response.data;
+  },
+  obtenerRecetaActual: async (empresaId: number, codigoLiquidacion: string, programaId: number) => {
+    const response = await api.get(`/api/config-liquidaciones/empresa/${empresaId}/plantilla/${codigoLiquidacion}/programa/${programaId}`);
+    return response.data;
+  },
+  eliminarPlantilla: async (id: number) => {
+    const response = await api.delete(`/api/config-liquidaciones/plantilla/${id}`);
+    return response.data;
+  }
 };

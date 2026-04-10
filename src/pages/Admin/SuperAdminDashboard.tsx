@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, ShieldCheck, LogOut, Database, UserSquare2, 
-  CreditCard, Search, Plus, Menu, Bell, Settings , Cpu
+  CreditCard, Search, Plus, Menu, Bell, Settings , Cpu, Calculator,FileText
 } from 'lucide-react';
 import TercerosManager from './views/TercerosManager';
 import ConfiguracionMaster from './views/ConfiguracionMaster';
@@ -10,6 +10,9 @@ import EmpresasManager from './views/EmpresasManager';
 import ProgramasManager from './views/ProgramasManager';
 import UsuariosManager from './views/UsuariosManager';
 import SuscripcionesManager from './views/SuscripcionesManager';
+import LiquidacionesMaster from './views/LiquidacionesMaster';
+import ConceptosManager from './views/ConceptosManager';
+
 
 // ============================================================================
 // COMPONENTE GENÉRICO TEMPORAL (Solo para Usuarios y Suscripciones por ahora)
@@ -95,6 +98,8 @@ export default function SuperAdminDashboard() {
     { id: 'terceros', label: 'Terceros (Base)', icon: Database },
     { id: 'empresas', label: 'Comercios (Tenants)', icon: Building2 },
     { id: 'programas', label: 'Programas (SaaS)', icon: Cpu },
+    { id: 'conceptos', label: 'Catálogo Conceptos', icon: FileText }, 
+    { id: 'esquemas', label: 'Esquemas de Cálculo', icon: Calculator },
     { id: 'usuarios', label: 'Usuarios y Accesos', icon: UserSquare2 },
     { id: 'suscripciones', label: 'Suscripciones', icon: CreditCard },
     { id: 'configuracion', label: 'Parametrización', icon: Settings },
@@ -174,6 +179,8 @@ export default function SuperAdminDashboard() {
 
           {activeTab === 'suscripciones' && <SuscripcionesManager />}
           {activeTab === 'programas' && <ProgramasManager />}
+          {activeTab === 'conceptos' && <ConceptosManager />}
+          {activeTab === 'esquemas' && <LiquidacionesMaster />}
 
         </div>
       </main>

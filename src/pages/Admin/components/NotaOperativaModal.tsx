@@ -13,7 +13,7 @@ interface NotaOperativaModalProps {
   onGuardadoExitoso: () => void;
 }
 
-export default function NotaOperativaModal({ isOpen, onClose, slotId, slotNombre, empresaId, onGuardadoExitoso }: NotaOperativaModalProps) {
+export default function NotaOperativaModal({ isOpen, onClose, slotId, slotNombre, empresaId, acuerdoId, onGuardadoExitoso }: NotaOperativaModalProps) {
   // Por defecto iniciamos con una Nota Débito (Anticipo)
   const [tipoNota, setTipoNota] = useState<'DEBITO' | 'CREDITO'>('DEBITO');
   
