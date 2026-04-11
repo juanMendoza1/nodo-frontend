@@ -2,22 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, Search, Plus, Edit2, Trash2, X, 
   CheckCircle2, Loader2, ChevronDown, Calculator, 
-  Delete, Eraser, Sigma, Binary, TerminalSquare
+  Delete, Eraser, Sigma, Binary, TerminalSquare, ShieldAlert, Globe, Building2, Server
 } from 'lucide-react';
 import { conceptosService } from '../../../api/conceptos.service';
 import { configuracionService } from '../../../api/configuracion.service';
 import { programasService } from '../../../api/programas.service';
 import { empresasService } from '../../../api/empresas.service';
 import toast from 'react-hot-toast';
-import ConfirmDialog from '../../../components/ui/ConfirmDialog'; // 🔥 IMPORTAMOS NUESTRO DIÁLOGO
+import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 
-// Componente Reutilizable
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loading, labelKey = 'nombre' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const selectedOption = options.find((opt: any) => opt.id.toString() === value?.toString());
-  const filteredOptions = options.filter((opt: any) => 
+  const safeOptions = options || [];
+  const selectedOption = safeOptions.find((opt: any) => opt.id?.toString() === value?.toString());
+  const filteredOptions = safeOptions.filter((opt: any) => 
     (opt[labelKey] || opt.nombre || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -39,7 +39,7 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loa
             </div>
             <div className="overflow-y-auto p-1">
               {filteredOptions.map((opt: any) => (
-                <button key={opt.id} type="button" onClick={() => { onChange(opt.id); setIsOpen(false); setSearchTerm(''); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${value?.toString() === opt.id.toString() ? 'bg-black text-white font-bold' : 'hover:bg-zinc-100 text-zinc-700'}`}>
+                <button key={opt.id} type="button" onClick={() => { onChange(opt.id); setIsOpen(false); setSearchTerm(''); }} className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${value?.toString() === opt.id?.toString() ? 'bg-black text-white font-bold' : 'hover:bg-zinc-100 text-zinc-700'}`}>
                   {opt[labelKey] || opt.nombre}
                 </button>
               ))}
@@ -51,7 +51,6 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loa
   );
 };
 
-// 🔥 CATÁLOGO DE FUNCIONES DEL SISTEMA
 const funcionesSistema = [
   { cmd: 'F_SUMA(', nombre: 'F_SUMA', desc: 'Suma múltiples valores separados por coma.' },
   { cmd: 'F_RESTA(', nombre: 'F_RESTA', desc: 'Resta en cascada a partir del primer valor.' },
@@ -76,12 +75,13 @@ export default function ConceptosManager() {
   
   const [formulaSearch, setFormulaSearch] = useState('');
   const [funcionSearch, setFuncionSearch] = useState('');
-
-  // 🔥 ESTADO PARA EL DIÁLOGO DE CONFIRMACIÓN
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, id: 0, nombre: '' });
 
   const usuarioString = localStorage.getItem('usuario');
   const usuarioData = usuarioString ? JSON.parse(usuarioString) : null;
+  const NODO_MASTER_ID = 1;
+
+  useEffect(() => { cargarConceptos(); }, []);
 
   const cargarConceptos = async () => {
     setLoading(true);
@@ -94,10 +94,6 @@ export default function ConceptosManager() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    cargarConceptos();
-  }, []);
 
   const cargarOpciones = async () => {
     setLoadingOptions(true);
@@ -123,21 +119,19 @@ export default function ConceptosManager() {
     setFuncionSearch(''); 
     if (item) {
       setEditingId(item.id);
+      
+      let alcanceInicial = 'LOCAL';
+      if (!item.programa) alcanceInicial = 'NODO';
+      else if (item.esGlobal) alcanceInicial = 'GLOBAL';
+
       setFormData({
-        codigo: item.codigo, 
-        nombre: item.nombre, 
-        tipoCalculo: item.tipoCalculo,
-        valorFijo: item.valorFijo || '', 
-        formula: item.formula || '',
-        esRecaudable: item.esRecaudable !== false, 
-        financiable: item.financiable || false, 
-        generaInteres: item.generaInteres || false,
-        aplicaIva: item.aplicaIva || false, 
-        esGlobal: item.esGlobal, 
+        codigo: item.codigo, nombre: item.nombre, tipoCalculo: item.tipoCalculo,
+        valorFijo: item.valorFijo || '', formula: item.formula || '',
+        esRecaudable: item.esRecaudable !== false, financiable: item.financiable || false, 
+        generaInteres: item.generaInteres || false, aplicaIva: item.aplicaIva || false, 
         esFuncion: item.esFuncion || false,
-        programaId: item.programa?.id || '', 
-        empresaId: item.empresa?.id || '', 
-        estructuraAgrupadoraId: item.estructuraAgrupadora?.id || '',
+        alcance: alcanceInicial, programaId: item.programa?.id || '', 
+        empresaId: item.empresa?.id || '', estructuraAgrupadoraId: item.estructuraAgrupadora?.id || '',
         activo: item.activo !== false
       });
     } else {
@@ -145,7 +139,7 @@ export default function ConceptosManager() {
       setFormData({ 
         codigo: '', nombre: '', tipoCalculo: 'DINAMICO', valorFijo: '', formula: '', 
         esRecaudable: true, financiable: false, generaInteres: false, aplicaIva: false, 
-        esGlobal: true, esFuncion: false, programaId: '', empresaId: '', estructuraAgrupadoraId: '', activo: true 
+        esFuncion: false, alcance: 'GLOBAL', programaId: '', empresaId: '', estructuraAgrupadoraId: '', activo: true 
       });
     }
     setIsDrawerOpen(true);
@@ -187,10 +181,13 @@ export default function ConceptosManager() {
       ...formData,
       valorFijo: formData.tipoCalculo === 'ESTATICO' ? Number(formData.valorFijo) : null,
       formula: formData.tipoCalculo === 'FORMULA' ? formData.formula.trim() : null,
-      programa: formData.programaId ? { id: formData.programaId } : null,
-      empresa: formData.empresaId && !formData.esGlobal ? { id: formData.empresaId } : null,
       estructuraAgrupadora: formData.estructuraAgrupadoraId ? { id: formData.estructuraAgrupadoraId } : null,
-      usuario: usuarioData?.usuarioId ? { id: usuarioData.usuarioId } : null
+      usuario: usuarioData?.usuarioId ? { id: usuarioData.usuarioId } : null,
+      
+      esGlobal: formData.alcance === 'GLOBAL',
+      // 🔥 Si es NODO o si el programaId está vacío (Transversal), enviamos null al backend
+      programa: (formData.alcance === 'NODO' || !formData.programaId) ? null : { id: formData.programaId },
+      empresa: formData.alcance === 'LOCAL' ? { id: formData.empresaId } : { id: NODO_MASTER_ID }
     };
 
     const request = editingId ? conceptosService.actualizar(editingId, payload) : conceptosService.crear(payload);
@@ -202,7 +199,6 @@ export default function ConceptosManager() {
     });
   };
 
-  // 🔥 NUEVA LÓGICA DE ELIMINACIÓN CON TOAST Y CONFIRM DIALOG
   const confirmarEliminacion = async () => {
     toast.promise(
       conceptosService.eliminar(confirmDialog.id),
@@ -225,12 +221,16 @@ export default function ConceptosManager() {
     c.codigo.toLowerCase().includes(search.toLowerCase()) || c.nombre.toLowerCase().includes(search.toLowerCase())
   );
 
-  const isFormValid = formData.codigo && formData.nombre && formData.programaId && formData.estructuraAgrupadoraId;
+  // 🔥 VALIDACIÓN MEJORADA: Si es GLOBAL, programaId no es obligatorio
+  const isFormValid = formData.codigo?.trim() && 
+                      formData.nombre?.trim() && 
+                      formData.estructuraAgrupadoraId &&
+                      (formData.alcance === 'NODO' || formData.alcance === 'GLOBAL' || formData.programaId) &&
+                      (formData.alcance !== 'LOCAL' || formData.empresaId);
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 relative h-full">
-      {/* HEADER PRINCIPAL */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 relative h-full flex flex-col">
+      <div className="flex justify-between items-end mb-6 shrink-0">
         <div>
           <h2 className="text-3xl font-black text-zinc-900 tracking-tight flex items-center gap-3">
             <FileText className="w-8 h-8 text-black" /> Catálogo de Conceptos
@@ -248,49 +248,57 @@ export default function ConceptosManager() {
         </div>
       </div>
 
-      {/* TABLA PRINCIPAL */}
-      <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white border border-zinc-200 rounded-3xl shadow-sm overflow-hidden flex-1 flex flex-col">
+        <div className="overflow-auto flex-1">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-zinc-50/80 border-b border-zinc-200 text-[10px] uppercase tracking-widest text-zinc-500 font-extrabold">
-                <th className="p-4 pl-6">Código (Var)</th>
-                <th className="p-4">Nombre / Descripción</th>
-                <th className="p-4">Cálculo</th>
-                <th className="p-4">Alcance</th>
-                <th className="p-4 text-right pr-6">Acciones</th>
+            <thead className="sticky top-0 bg-zinc-50/95 backdrop-blur-sm z-10 shadow-sm">
+              <tr className="border-b border-zinc-200 text-[10px] uppercase tracking-widest text-zinc-500 font-extrabold">
+                <th className="p-5 pl-6">Código (Var)</th>
+                <th className="p-5">Nombre / Descripción</th>
+                <th className="p-5">Cálculo</th>
+                <th className="p-5">Módulo SaaS</th>
+                <th className="p-5">Nivel de Acceso</th>
+                <th className="p-5 text-right pr-6">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
-                <tr><td colSpan={5} className="p-12 text-center"><Loader2 className="w-8 h-8 text-black animate-spin mx-auto mb-3" /></td></tr>
+                <tr><td colSpan={6} className="p-12 text-center"><Loader2 className="w-8 h-8 text-black animate-spin mx-auto mb-3" /></td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={5} className="p-12 text-center font-bold text-zinc-500">No hay conceptos registrados.</td></tr>
+                <tr><td colSpan={6} className="p-12 text-center font-bold text-zinc-500">No hay conceptos registrados.</td></tr>
               ) : (
                 filtered.map(c => (
                   <tr key={c.id} className="hover:bg-zinc-50 transition-colors group">
-                    <td className="p-4 pl-6 font-mono text-sm font-black text-indigo-600">{c.codigo}</td>
+                    <td className="p-4 pl-6 font-mono text-sm font-black text-zinc-800">{c.codigo}</td>
                     <td className="p-4 text-sm font-bold text-zinc-900">{c.nombre}</td>
                     <td className="p-4">
                       <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest border ${
-                        c.tipoCalculo === 'FORMULA' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                        c.tipoCalculo === 'ESTATICO' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                        'bg-zinc-100 text-zinc-600 border-zinc-200'
+                        c.tipoCalculo === 'FORMULA' ? 'bg-zinc-800 text-white border-zinc-800' :
+                        c.tipoCalculo === 'ESTATICO' ? 'bg-zinc-100 text-zinc-800 border-zinc-300' :
+                        'bg-white text-zinc-600 border-zinc-200 shadow-sm'
                       }`}>
                         {c.tipoCalculo}
                       </span>
                       {c.tipoCalculo === 'ESTATICO' && <span className="block mt-1 text-xs font-mono font-bold text-zinc-500">${c.valorFijo}</span>}
-                      {c.tipoCalculo === 'FORMULA' && <span className="block mt-1 text-[10px] font-mono text-amber-600 truncate max-w-[150px]" title={c.formula}>{c.formula}</span>}
+                      {c.tipoCalculo === 'FORMULA' && <span className="block mt-1 text-[10px] font-mono text-zinc-600 truncate max-w-[150px]" title={c.formula}>{c.formula}</span>}
                     </td>
                     <td className="p-4">
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500">
-                        {c.esGlobal ? 'Global (SaaS)' : c.empresa?.nombreComercial}
+                      <span className="text-xs font-bold text-zinc-600">
+                        {c.programa ? c.programa.nombre : <span className="text-zinc-400 font-medium">N/A (Transversal)</span>}
                       </span>
+                    </td>
+                    <td className="p-4">
+                      {!c.programa ? (
+                         <span className="px-2 py-1 rounded bg-black text-white text-[10px] font-extrabold uppercase tracking-widest">NODO (SaaS)</span>
+                      ) : c.esGlobal ? (
+                         <span className="px-2 py-1 rounded bg-zinc-800 text-zinc-100 border border-zinc-800 text-[10px] font-extrabold uppercase tracking-widest">Global</span>
+                      ) : (
+                         <span className="px-2 py-1 rounded bg-zinc-100 text-zinc-600 border border-zinc-200 text-[10px] font-extrabold uppercase tracking-widest">{c.empresa?.nombreComercial}</span>
+                      )}
                     </td>
                     <td className="p-4 pr-6">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => handleOpenDrawer(c)} className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-lg"><Edit2 className="w-4 h-4" /></button>
-                        {/* 🔥 ACTUALIZADO AL COMPONENTE DE CONFIRMACIÓN */}
                         <button onClick={() => setConfirmDialog({ isOpen: true, id: c.id!, nombre: c.nombre })} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
@@ -302,7 +310,6 @@ export default function ConceptosManager() {
         </div>
       </div>
 
-      {/* DRAWER FORMULARIO */}
       {isDrawerOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" onClick={() => setIsDrawerOpen(false)}></div>}
       <div className={`fixed top-0 right-0 h-full w-full max-w-4xl bg-white shadow-2xl z-50 transform transition-transform duration-300 flex flex-col ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         
@@ -319,15 +326,71 @@ export default function ConceptosManager() {
         <div className="flex-1 overflow-y-auto p-6">
           <form id="conceptoForm" onSubmit={handleSubmit} className="space-y-6">
             
+            <div className="mb-6">
+               <label className="text-[11px] font-extrabold uppercase text-zinc-500 flex items-center gap-2 mb-3">
+                 <ShieldAlert className="w-4 h-4 text-black" /> Nivel de Acceso (Alcance)
+               </label>
+               
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                 
+                 <div 
+                   onClick={() => setFormData({...formData, alcance: 'NODO', programaId: ''})}
+                   className={`cursor-pointer p-4 rounded-xl border transition-all duration-200 ${formData.alcance === 'NODO' ? 'bg-black border-black text-white shadow-md scale-[1.02]' : 'bg-white border-zinc-200 hover:border-zinc-400 opacity-70 hover:opacity-100'}`}
+                 >
+                   <div className="flex items-center gap-2 mb-1.5">
+                     <Server className={`w-4 h-4 ${formData.alcance === 'NODO' ? 'text-zinc-300' : 'text-zinc-500'}`} />
+                     <h4 className={`font-black text-sm ${formData.alcance === 'NODO' ? 'text-white' : 'text-zinc-900'}`}>NODO (SaaS)</h4>
+                   </div>
+                   <p className={`text-[11px] font-medium leading-tight ${formData.alcance === 'NODO' ? 'text-zinc-400' : 'text-zinc-500'}`}>Exclusivo SuperAdmin. Uso interno para facturación y cobros.</p>
+                 </div>
+
+                 <div 
+                   onClick={() => setFormData({...formData, alcance: 'GLOBAL', programaId: ''})}
+                   className={`cursor-pointer p-4 rounded-xl border transition-all duration-200 ${formData.alcance === 'GLOBAL' ? 'bg-zinc-800 border-zinc-800 text-white shadow-md scale-[1.02]' : 'bg-white border-zinc-200 hover:border-zinc-400 opacity-70 hover:opacity-100'}`}
+                 >
+                   <div className="flex items-center gap-2 mb-1.5">
+                     <Globe className={`w-4 h-4 ${formData.alcance === 'GLOBAL' ? 'text-zinc-300' : 'text-zinc-500'}`} />
+                     <h4 className={`font-black text-sm ${formData.alcance === 'GLOBAL' ? 'text-white' : 'text-zinc-900'}`}>GLOBAL</h4>
+                   </div>
+                   <p className={`text-[11px] font-medium leading-tight ${formData.alcance === 'GLOBAL' ? 'text-zinc-400' : 'text-zinc-500'}`}>Disponible para todos los clientes (Tenants) suscritos al módulo.</p>
+                 </div>
+
+                 <div 
+                   onClick={() => setFormData({...formData, alcance: 'LOCAL'})}
+                   className={`cursor-pointer p-4 rounded-xl border transition-all duration-200 ${formData.alcance === 'LOCAL' ? 'bg-zinc-100 border-zinc-900 text-zinc-900 shadow-sm scale-[1.02]' : 'bg-white border-zinc-200 hover:border-zinc-400 opacity-70 hover:opacity-100'}`}
+                 >
+                   <div className="flex items-center gap-2 mb-1.5">
+                     <Building2 className={`w-4 h-4 ${formData.alcance === 'LOCAL' ? 'text-black' : 'text-zinc-500'}`} />
+                     <h4 className={`font-black text-sm ${formData.alcance === 'LOCAL' ? 'text-black' : 'text-zinc-900'}`}>LOCAL (Tenant)</h4>
+                   </div>
+                   <p className={`text-[11px] font-medium leading-tight ${formData.alcance === 'LOCAL' ? 'text-zinc-600' : 'text-zinc-500'}`}>Privado y exclusivo para un solo cliente y módulo.</p>
+                 </div>
+
+               </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div className="space-y-1.5">
                  <label className="text-[11px] font-extrabold uppercase text-zinc-500">Código Variable *</label>
                  <input required value={formData.codigo} onChange={e => setFormData({...formData, codigo: e.target.value.toUpperCase().replace(/\s/g, '_')})} disabled={!!editingId} placeholder="Ej. IVA_19" className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono font-bold focus:bg-white focus:border-black uppercase disabled:opacity-50" />
                </div>
-               <div className="space-y-1.5">
-                 <label className="text-[11px] font-extrabold uppercase text-zinc-500">Módulo (SaaS) *</label>
-                 <SearchableSelect value={formData.programaId} options={programas} onChange={(v:any) => setFormData({...formData, programaId: v})} placeholder="Seleccionar..." loading={loadingOptions} labelKey="nombre" />
-               </div>
+               
+               {formData.alcance !== 'NODO' && (
+                 <div className="space-y-1.5 animate-in fade-in">
+                   <label className="text-[11px] font-extrabold uppercase text-zinc-500 flex items-center gap-1">
+                     Módulo SaaS {formData.alcance === 'GLOBAL' && <span className="lowercase font-medium text-zinc-400">(Opcional)</span>}
+                   </label>
+                   {/* 🔥 SE AÑADE LA OPCIÓN TRANSVERSAL SI ES GLOBAL */}
+                   <SearchableSelect 
+                     value={formData.programaId} 
+                     options={formData.alcance === 'GLOBAL' ? [{ id: '', nombre: '--- Ninguno (Transversal) ---' }, ...programas] : programas} 
+                     onChange={(v:any) => setFormData({...formData, programaId: v})} 
+                     placeholder={formData.alcance === 'GLOBAL' ? "Transversal (Aplica a todos)..." : "Seleccionar Módulo..."} 
+                     loading={loadingOptions} 
+                     labelKey="nombre" 
+                   />
+                 </div>
+               )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -358,21 +421,19 @@ export default function ConceptosManager() {
               </div>
             )}
 
-            {/* 🔥 CALCULADORA VISUAL CON TEXTAREA REDUCIDO */}
             {formData.tipoCalculo === 'FORMULA' && (
               <div className="animate-in fade-in bg-zinc-50 border border-zinc-200 p-5 rounded-2xl shadow-inner mt-6">
                 
-                {/* Pantalla */}
                 <div className="relative mb-5">
                   <textarea 
                     readOnly 
                     rows={2}
                     value={formData.formula} 
                     placeholder="LA FÓRMULA SE CONSTRUIRÁ AQUÍ..." 
-                    className="w-full p-4 bg-white border border-zinc-300 rounded-xl text-sm font-mono font-bold text-emerald-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-none uppercase shadow-sm cursor-not-allowed pr-14" 
+                    className="w-full p-4 bg-white border border-zinc-300 rounded-xl text-sm font-mono font-bold text-zinc-800 focus:outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-500/20 resize-none uppercase shadow-sm cursor-not-allowed pr-14" 
                   />
                   <div className="absolute top-3 right-3 flex flex-col gap-1.5">
-                    <button type="button" onClick={borrarUltimoToken} className="p-1.5 bg-red-50 text-red-500 hover:text-white hover:bg-red-500 rounded-lg border border-red-100 transition-colors shadow-sm" title="Borrar último bloque">
+                    <button type="button" onClick={borrarUltimoToken} className="p-1.5 bg-zinc-100 text-zinc-500 hover:text-white hover:bg-black rounded-lg border border-zinc-200 transition-colors shadow-sm" title="Borrar último bloque">
                       <Delete className="w-4 h-4" />
                     </button>
                     <button type="button" onClick={() => setFormData({...formData, formula: ''})} className="p-1.5 bg-zinc-100 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200 rounded-lg border border-zinc-200 transition-colors shadow-sm" title="Limpiar pantalla">
@@ -381,10 +442,8 @@ export default function ConceptosManager() {
                   </div>
                 </div>
 
-                {/* Teclados: 3 Columnas */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   
-                  {/* COL 1: TECLADO NUMÉRICO */}
                   <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                       <Calculator className="w-4 h-4 text-zinc-400" />
@@ -395,24 +454,23 @@ export default function ConceptosManager() {
                         <button key={op} type="button" onClick={() => inyectarEnFormula(op, false)} className="h-12 bg-zinc-100 border border-zinc-200 rounded-xl text-sm font-black text-zinc-600 hover:bg-zinc-200 transition-colors">{op}</button>
                       ))}
                       {['7', '8', '9', '/'].map((op, i) => (
-                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<3)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-100'}`}>{op}</button>
+                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<3)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-200 border-zinc-200'}`}>{op}</button>
                       ))}
                       {['4', '5', '6', '*'].map((op, i) => (
-                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<3)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-100'}`}>{op}</button>
+                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<3)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-200 border-zinc-200'}`}>{op}</button>
                       ))}
                       {['1', '2', '3', '-'].map((op, i) => (
-                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<3)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-100'}`}>{op}</button>
+                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<3)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-200 border-zinc-200'}`}>{op}</button>
                       ))}
                       {['0', '.', ',', '+'].map((op, i) => (
-                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<2)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-100'}`}>{op}</button>
+                        <button key={op} type="button" onClick={() => inyectarEnFormula(op, i<2)} className={`h-12 border border-zinc-200 rounded-xl text-lg font-black transition-colors ${i<3 ? 'bg-white text-zinc-800 hover:bg-zinc-100 shadow-sm' : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-200 border-zinc-200'}`}>{op}</button>
                       ))}
                     </div>
                   </div>
 
-                  {/* COL 2: FUNCIONES CON BUSCADOR */}
                   <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm flex flex-col h-[345px]">
                     <div className="flex items-center gap-2 mb-3 shrink-0">
-                      <Sigma className="w-4 h-4 text-indigo-500" />
+                      <Sigma className="w-4 h-4 text-black" />
                       <p className="text-[10px] font-extrabold uppercase text-zinc-500">Funciones de Motor</p>
                     </div>
                     
@@ -423,7 +481,7 @@ export default function ConceptosManager() {
                         placeholder="Filtrar funciones..." 
                         value={funcionSearch}
                         onChange={(e) => setFuncionSearch(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500 transition-all"
+                        className="w-full pl-8 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:border-black transition-all"
                       />
                     </div>
 
@@ -434,22 +492,18 @@ export default function ConceptosManager() {
                         <button 
                           key={fn.cmd} type="button" 
                           onClick={() => inyectarEnFormula(fn.cmd, false)}
-                          className="w-full p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl text-left hover:bg-indigo-500 hover:border-indigo-500 group transition-all"
+                          className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-left hover:bg-black hover:border-black group transition-all"
                         >
-                          <p className="text-xs font-black text-indigo-700 font-mono group-hover:text-white">{fn.nombre}</p>
-                          <p className="text-[10px] font-medium text-indigo-400 group-hover:text-indigo-100 mt-1 leading-tight">{fn.desc}</p>
+                          <p className="text-xs font-black text-zinc-700 font-mono group-hover:text-white">{fn.nombre}</p>
+                          <p className="text-[10px] font-medium text-zinc-500 group-hover:text-zinc-300 mt-1 leading-tight">{fn.desc}</p>
                         </button>
                       ))}
-                      {funcionesSistema.filter(fn => fn.nombre.toLowerCase().includes(funcionSearch.toLowerCase()) || fn.desc.toLowerCase().includes(funcionSearch.toLowerCase())).length === 0 && (
-                        <p className="text-xs text-zinc-400 text-center py-4">No se encontraron funciones.</p>
-                      )}
                     </div>
                   </div>
 
-                  {/* COL 3: VARIABLES */}
                   <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-sm flex flex-col h-[345px]">
                     <div className="flex items-center gap-2 mb-3 shrink-0">
-                      <Binary className="w-4 h-4 text-emerald-500" />
+                      <Binary className="w-4 h-4 text-black" />
                       <p className="text-[10px] font-extrabold uppercase text-zinc-500">Variables Disponibles</p>
                     </div>
                     <div className="relative mb-3 shrink-0">
@@ -459,7 +513,7 @@ export default function ConceptosManager() {
                         placeholder="Filtrar variables..." 
                         value={formulaSearch}
                         onChange={(e) => setFormulaSearch(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500 transition-all"
+                        className="w-full pl-8 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:border-black transition-all"
                       />
                     </div>
                     <div className="flex-1 overflow-y-auto space-y-2 pr-1">
@@ -469,14 +523,13 @@ export default function ConceptosManager() {
                           <button 
                             key={c.id} type="button"
                             onClick={() => inyectarEnFormula(c.codigo, false)}
-                            className="w-full p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl text-left hover:bg-emerald-500 hover:border-emerald-500 group transition-all"
+                            className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-left hover:bg-black hover:border-black group transition-all"
                             title={c.nombre}
                           >
-                            <p className="text-xs font-black text-emerald-700 font-mono group-hover:text-white truncate">{c.codigo}</p>
-                            <p className="text-[10px] font-medium text-emerald-400 group-hover:text-emerald-100 mt-1 truncate">{c.nombre}</p>
+                            <p className="text-xs font-black text-zinc-700 font-mono group-hover:text-white truncate">{c.codigo}</p>
+                            <p className="text-[10px] font-medium text-zinc-500 group-hover:text-zinc-300 mt-1 truncate">{c.nombre}</p>
                           </button>
                       ))}
-                      {conceptos.length === 0 && <p className="text-xs text-zinc-400 text-center py-4">No hay variables.</p>}
                     </div>
                   </div>
 
@@ -484,19 +537,18 @@ export default function ConceptosManager() {
               </div>
             )}
 
-            {/* 🔥 CONFIGURACIONES FINANCIERAS */}
             <div className="pt-6 border-t border-zinc-100">
                <p className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-3">Comportamiento Contable</p>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-50 p-4 rounded-2xl border border-zinc-200 shadow-inner">
                  
                  <label className="flex items-center gap-3 cursor-pointer">
                    <input type="checkbox" checked={formData.esRecaudable} onChange={e => setFormData({...formData, esRecaudable: e.target.checked})} className="w-4 h-4 accent-black" />
-                   <span className="text-sm font-bold text-zinc-700">Es Recaudable <span className="text-xs font-medium text-zinc-500 block">(Genera Cobro al Cliente)</span></span>
+                   <span className="text-sm font-bold text-zinc-700">Es Recaudable <span className="text-xs font-medium text-zinc-500 block">(Genera Cobro)</span></span>
                  </label>
 
                  <label className="flex items-center gap-3 cursor-pointer">
                    <input type="checkbox" checked={formData.esFuncion} onChange={e => setFormData({...formData, esFuncion: e.target.checked})} className="w-4 h-4 accent-black" />
-                   <span className="text-sm font-bold text-zinc-700">Contiene Función <span className="text-xs font-medium text-zinc-500 block">(Indica al motor evaluar funciones nativas)</span></span>
+                   <span className="text-sm font-bold text-zinc-700">Contiene Función <span className="text-xs font-medium text-zinc-500 block">(Lógica de Motor)</span></span>
                  </label>
 
                  <label className="flex items-center gap-3 cursor-pointer">
@@ -506,25 +558,15 @@ export default function ConceptosManager() {
 
                  <label className="flex items-center gap-3 cursor-pointer">
                    <input type="checkbox" checked={formData.financiable} onChange={e => setFormData({...formData, financiable: e.target.checked})} className="w-4 h-4 accent-black" />
-                   <span className="text-sm font-bold text-zinc-700">Es Financiable <span className="text-xs font-medium text-zinc-500 block">(Permite dar a crédito)</span></span>
-                 </label>
-
-                 <label className="flex items-center gap-3 cursor-pointer">
-                   <input type="checkbox" checked={formData.generaInteres} onChange={e => setFormData({...formData, generaInteres: e.target.checked})} className="w-4 h-4 accent-black" />
-                   <span className="text-sm font-bold text-zinc-700">Genera Interés <span className="text-xs font-medium text-zinc-500 block">(Calcula mora si hay retraso)</span></span>
-                 </label>
-
-                 <label className="flex items-center gap-3 cursor-pointer">
-                   <input type="checkbox" checked={formData.esGlobal} onChange={e => setFormData({...formData, esGlobal: e.target.checked, empresaId: e.target.checked ? '' : formData.empresaId})} className="w-4 h-4 accent-black" />
-                   <span className="text-sm font-bold text-zinc-700">Concepto Global <span className="text-xs font-medium text-zinc-500 block">(Visible para todo el SaaS)</span></span>
+                   <span className="text-sm font-bold text-zinc-700">Es Financiable <span className="text-xs font-medium text-zinc-500 block">(A crédito)</span></span>
                  </label>
 
                </div>
             </div>
 
-            {!formData.esGlobal && (
+            {formData.alcance === 'LOCAL' && (
               <div className="space-y-1.5 animate-in fade-in pb-4">
-                <label className="text-[11px] font-extrabold uppercase text-zinc-500">Asignar a Empresa (Tenant) *</label>
+                <label className="text-[11px] font-extrabold uppercase text-zinc-500">Asignar a Cliente (Tenant) *</label>
                 <SearchableSelect value={formData.empresaId} options={empresas} onChange={(v:any) => setFormData({...formData, empresaId: v})} placeholder="Seleccionar Tenant..." loading={loadingOptions} labelKey="nombreComercial" />
               </div>
             )}
@@ -547,11 +589,10 @@ export default function ConceptosManager() {
         </div>
       </div>
 
-      {/* 🔥 COMPONENTE CONFIRM DIALOG */}
       <ConfirmDialog 
         isOpen={confirmDialog.isOpen}
         title="Eliminar Concepto"
-        message={`¿Estás seguro que deseas eliminar el concepto "${confirmDialog.nombre}"? Si ya está en uso en alguna liquidación, el sistema bloqueará la acción.`}
+        message={`¿Estás seguro que deseas eliminar el concepto "${confirmDialog.nombre}"? Si ya está en uso, el sistema bloqueará la acción.`}
         onCancel={() => setConfirmDialog({ isOpen: false, id: 0, nombre: '' })}
         onConfirm={confirmarEliminacion}
       />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, ShieldCheck, LogOut, Database, UserSquare2, 
-  CreditCard, Search, Plus, Menu, Bell, Settings , Cpu, Calculator,FileText
+  CreditCard, Search, Plus, Menu, Bell, Settings , Cpu, Calculator,FileText,Receipt
 } from 'lucide-react';
 import TercerosManager from './views/TercerosManager';
 import ConfiguracionMaster from './views/ConfiguracionMaster';
@@ -12,6 +12,7 @@ import UsuariosManager from './views/UsuariosManager';
 import SuscripcionesManager from './views/SuscripcionesManager';
 import LiquidacionesMaster from './views/LiquidacionesMaster';
 import ConceptosManager from './views/ConceptosManager';
+import FacturacionSaaS from './views/FacturacionSaaS';
 
 
 // ============================================================================
@@ -102,6 +103,7 @@ export default function SuperAdminDashboard() {
     { id: 'esquemas', label: 'Esquemas de Cálculo', icon: Calculator },
     { id: 'usuarios', label: 'Usuarios y Accesos', icon: UserSquare2 },
     { id: 'suscripciones', label: 'Suscripciones', icon: CreditCard },
+    { id: 'facturacion_saas', label: 'Facturación SaaS', icon: Receipt },
     { id: 'configuracion', label: 'Parametrización', icon: Settings },
   ];
 
@@ -178,6 +180,7 @@ export default function SuperAdminDashboard() {
           {activeTab === 'usuarios' && <UsuariosManager />}
 
           {activeTab === 'suscripciones' && <SuscripcionesManager />}
+          {activeTab === 'facturacion_saas' && <FacturacionSaaS />}
           {activeTab === 'programas' && <ProgramasManager />}
           {activeTab === 'conceptos' && <ConceptosManager />}
           {activeTab === 'esquemas' && <LiquidacionesMaster />}

@@ -1,7 +1,7 @@
 import api from './axios.config';
 
 export const configuracionService = {
-  // Recibe la entidad (ej: 'unidades', 'estructuras', 'clases')
+  // Servicio dinámico puro para Clases, Estructuras y Unidades
   obtenerTodos: async (entidad: string) => {
     const response = await api.get(`/api/${entidad}`);
     return response.data;
