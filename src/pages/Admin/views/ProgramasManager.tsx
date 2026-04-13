@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   PackageSearch, Plus, Search, Edit2, Trash2, 
-  X, CheckCircle2, Loader2, Cpu, Code2, PlayCircle, Lock, CheckSquare
+  X, CheckCircle2, Loader2, Cpu, Code2, PlayCircle, Lock, CheckSquare, Server
 } from 'lucide-react';
 import { programasService, type ProgramaData } from '../../../api/programas.service';
 import api from '../../../api/axios.config';
@@ -10,24 +10,27 @@ import toast from 'react-hot-toast';
 export default function ProgramasManager() {
   const [programas, setProgramas] = useState<ProgramaData[]>([]);
   const [permisosDisponibles, setPermisosDisponibles] = useState<any[]>([]);
+  const [dominios, setDominios] = useState<any[]>([]); // 🔥 ESTADO PARA DOMINIOS
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState<ProgramaData>({
-    codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: []
+    codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined
   });
 
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const [progs, perms] = await Promise.all([
+      const [progs, perms, doms] = await Promise.all([
         programasService.obtenerTodos(),
-        api.get('/api/permisos').then(r => r.data)
+        api.get('/api/permisos').then(r => r.data),
+        api.get('/api/dominios-operativos').then(r => r.data) // 🔥 CARGAMOS DOMINIOS
       ]);
       setProgramas(progs || []);
       setPermisosDisponibles(perms || []);
+      setDominios(doms || []);
     } catch (error) {
       console.error("Error cargando datos:", error);
     } finally {
@@ -45,7 +48,7 @@ export default function ProgramasManager() {
       setFormData({ ...programa, permisosIds: programa.permisosIds || [] });
     } else {
       setEditingId(null);
-      setFormData({ codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [] });
+      setFormData({ codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined });
     }
     setIsDrawerOpen(true);
   };
@@ -112,7 +115,7 @@ export default function ProgramasManager() {
           <h2 className="text-3xl font-black text-zinc-900 tracking-tight flex items-center gap-3">
             <Cpu className="w-8 h-8 text-black" /> Catálogo de Programas
           </h2>
-          <p className="text-sm text-zinc-500 font-medium mt-1">Arma paquetes SaaS (Legos) agrupando funcionalidades y permisos.</p>
+          <p className="text-sm text-zinc-500 font-medium mt-1">Arma paquetes SaaS (Legos) agrupando funcionalidades y módulos.</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-72">
@@ -165,9 +168,15 @@ export default function ProgramasManager() {
                 <p className="text-sm font-medium text-zinc-600 line-clamp-3 leading-relaxed mb-3">
                   {prog.descripcion || 'Sin descripción detallada.'}
                 </p>
+                {/* Mostramos el dominio asignado si lo tiene */}
+                {prog.dominioNombre && (
+                  <div className="flex items-center gap-1.5 mb-3 text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 border border-indigo-100 w-max px-2 py-1 rounded-md">
+                    <Server className="w-3 h-3" /> {prog.dominioNombre}
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1">
                   {(prog.permisosCodigos || []).slice(0, 3).map(cod => (
-                    <span key={cod} className="bg-zinc-100 text-zinc-600 text-[9px] font-bold px-2 py-0.5 rounded border border-zinc-200">{cod}</span>
+                    <span key={cod} className="bg-zinc-100 text-zinc-600 text-[9px] font-bold px-2 py-0.5 rounded border border-zinc-200">{cod.replace('MOD_', '')}</span>
                   ))}
                   {(prog.permisosCodigos || []).length > 3 && (
                     <span className="bg-zinc-100 text-zinc-600 text-[9px] font-bold px-2 py-0.5 rounded border border-zinc-200">+{prog.permisosCodigos!.length - 3}</span>
@@ -220,7 +229,7 @@ export default function ProgramasManager() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Código Único *</label>
-                <input required type="text" value={formData.codigo} onChange={e => setFormData({...formData, codigo: e.target.value.toUpperCase()})} disabled={!!editingId} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black disabled:opacity-50" placeholder="Ej. POS_CORE" />
+                <input required type="text" value={formData.codigo} onChange={e => setFormData({...formData, codigo: e.target.value.toUpperCase().replace(/\s/g, '_')})} disabled={!!editingId} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black disabled:opacity-50" placeholder="Ej. POS_CORE" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Versión</label>
@@ -229,23 +238,44 @@ export default function ProgramasManager() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Nombre del Módulo *</label>
+              <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Nombre del Programa *</label>
               <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black" placeholder="Ej. Sistema de Inventario Básico" />
             </div>
 
+            {/* 🔥 NUEVO: SELECTOR DE DOMINIO OPERATIVO DINÁMICO */}
             <div className="space-y-1.5">
-              <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Descripción / Detalles</label>
+              <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
+                <Server className="w-3.5 h-3.5 text-zinc-400" /> Dominio Operativo (Motor de BD) *
+              </label>
+              <select 
+                required 
+                value={formData.dominioId || ''} 
+                onChange={e => setFormData({...formData, dominioId: Number(e.target.value)})} 
+                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold text-zinc-800 focus:bg-white focus:outline-none focus:border-black transition-all cursor-pointer"
+              >
+                <option value="" disabled>Seleccionar Dominio Dinámico...</option>
+                {dominios.filter(d => d.activo).map(dom => (
+                   <option key={dom.id} value={dom.id}>
+                     {dom.nombre} (Prefijo BD: {dom.prefijoTablas})
+                   </option>
+                ))}
+              </select>
+              <p className="text-[9px] font-bold text-zinc-400 mt-1">Define qué tablas de la base de datos recibirán la información de las tablets.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">Descripción Comercial</label>
               <textarea rows={2} value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black resize-none" placeholder="¿Qué funcionalidades incluye este paquete?" />
             </div>
 
-            {/* 🔥 GESTOR DE PIEZAS DE LEGO (PERMISOS) */}
+            {/* 🔥 MÓDULOS SAAS */}
             <div className="space-y-3 pt-4 border-t border-zinc-100">
               <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                <CheckSquare className="w-4 h-4 text-zinc-400" /> Funcionalidades Incluidas (Features)
+                <CheckSquare className="w-4 h-4 text-zinc-400" /> Módulos SaaS Incluidos
               </label>
               <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 max-h-48 overflow-y-auto grid grid-cols-2 gap-3 shadow-inner">
                 {permisosDisponibles.length === 0 ? (
-                  <p className="text-xs text-zinc-400 col-span-2 text-center py-2">No hay permisos creados en el sistema.</p>
+                  <p className="text-xs text-zinc-400 col-span-2 text-center py-2">No hay módulos creados en el sistema.</p>
                 ) : (
                   permisosDisponibles.map(p => {
                     const isChecked = formData.permisosIds?.includes(p.id);
@@ -261,7 +291,7 @@ export default function ProgramasManager() {
                           {isChecked && <CheckCircle2 className="w-3 h-3 text-white" />}
                         </div>
                         <div className="min-w-0">
-                          <p className={`text-xs font-bold truncate ${isChecked ? 'text-black' : 'text-zinc-600'}`} title={p.descripcion}>{p.codigo}</p>
+                          <p className={`text-xs font-bold truncate ${isChecked ? 'text-black' : 'text-zinc-600'}`} title={p.descripcion}>{p.codigo.replace('MOD_', 'Módulo ')}</p>
                         </div>
                       </div>
                     )
@@ -271,7 +301,7 @@ export default function ProgramasManager() {
             </div>
 
             <div className="flex items-center gap-3 pt-4 border-t border-zinc-100">
-              <input type="checkbox" id="estadoActivo" checked={formData.activo} onChange={(e) => setFormData({...formData, activo: e.target.checked})} className="w-4 h-4 text-black border-zinc-300 rounded focus:ring-black accent-black" />
+              <input type="checkbox" id="estadoActivo" checked={formData.activo} onChange={(e) => setFormData({...formData, activo: e.target.checked})} className="w-4 h-4 text-black border-zinc-300 rounded focus:ring-black accent-black cursor-pointer" />
               <label htmlFor="estadoActivo" className="text-sm font-bold text-zinc-700 cursor-pointer">Programa Activo y Comercializable</label>
             </div>
 
@@ -281,7 +311,7 @@ export default function ProgramasManager() {
         <div className="p-6 border-t border-zinc-100 bg-zinc-50">
           <div className="flex gap-3">
             <button type="button" onClick={handleCloseDrawer} className="flex-1 px-4 py-3 rounded-xl border border-zinc-200 text-zinc-600 font-bold hover:bg-zinc-100 transition-colors text-sm">Cancelar</button>
-            <button type="submit" form="programaForm" disabled={!formData.codigo || !formData.nombre} className="flex-1 px-4 py-3 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 shadow-md transition-all text-sm flex justify-center items-center gap-2 disabled:opacity-50">
+            <button type="submit" form="programaForm" disabled={!formData.codigo || !formData.nombre || !formData.dominioId} className="flex-1 px-4 py-3 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 shadow-md transition-all text-sm flex justify-center items-center gap-2 disabled:opacity-50">
               <CheckCircle2 className="w-4 h-4" /> {editingId ? 'Actualizar Paquete' : 'Guardar Paquete'}
             </button>
           </div>

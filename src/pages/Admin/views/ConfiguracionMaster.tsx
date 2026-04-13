@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Layers, ListTree, Hash, Shield, 
-  Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown, Store
+  Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown, Store,Server
 } from 'lucide-react';
 import { configuracionService } from '../../../api/configuracion.service';
 import toast from 'react-hot-toast'; // 🔥 IMPORTAMOS TOAST
@@ -133,6 +133,19 @@ const TABS_CONFIG: Record<string, any> = {
       { key: 'nombre', label: 'Nombre Comercial', type: 'text', placeholder: 'Ej. Billar y Bar' },
       { key: 'descripcion', label: 'Descripción (Opcional)', type: 'text', placeholder: 'Detalle del comercio...' },
       { key: 'templateMovil', label: 'Template Móvil (App) *', type: 'text', placeholder: 'Ej. ARENA_DUELO o POS_ESTANDAR' }
+    ]
+  },
+  dominios: {
+    endpoint: 'dominios-operativos',
+    title: 'Dominios Operativos',
+    desc: 'Motor de enrutamiento de datos (SaaS).',
+    icon: Server,
+    columns: ['ID', 'Código', 'Nombre', 'Prefijo BD', 'Bean Procesador', 'Estado'],
+    fields: [
+      { key: 'codigo', label: 'Código Único', type: 'text', placeholder: 'Ej. RETAIL' },
+      { key: 'nombre', label: 'Nombre Descriptivo', type: 'text', placeholder: 'Ej. Ventas y Retail' },
+      { key: 'prefijoTablas', label: 'Prefijo en BD', type: 'text', placeholder: 'Ej. inv_' },
+      { key: 'serviceProcessorBean', label: 'Bean Procesador (Spring)', type: 'text', placeholder: 'Ej. retailSyncProcessor' }
     ]
   }
 };
@@ -405,6 +418,19 @@ export default function ConfiguracionMaster() {
                           <td className="p-4">
                             <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-1.5 rounded-md">
                               {item.templateMovil || 'ESTANDAR'}
+                            </span>
+                          </td>
+                        </>
+                      )}
+
+                      {activeTab === 'dominios' && (
+                        <>
+                          <td className="p-4 text-[11px] font-black text-zinc-800 uppercase tracking-widest">{item.codigo}</td>
+                          <td className="p-4 text-sm font-bold text-zinc-900">{item.nombre}</td>
+                          <td className="p-4 text-xs font-mono font-bold text-zinc-500">{item.prefijoTablas || '---'}</td>
+                          <td className="p-4">
+                            <span className="text-[10px] font-mono font-bold bg-zinc-100 text-zinc-600 border border-zinc-200 px-2 py-1 rounded-md">
+                              {item.serviceProcessorBean || '---'}
                             </span>
                           </td>
                         </>

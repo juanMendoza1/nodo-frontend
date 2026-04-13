@@ -7,6 +7,7 @@ export interface ProgramaData {
   descripcion?: string;
   version?: string;
   activo: boolean;
+  dominioOperativo?: string;
   permisosIds?: number[]; 
   permisosCodigos?: string[];
 }
