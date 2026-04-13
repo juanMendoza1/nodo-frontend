@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   PackageSearch, Plus, Search, Edit2, Trash2, 
-  X, CheckCircle2, Loader2, Cpu, Code2, PlayCircle, Lock, CheckSquare, Server
+  X, CheckCircle2, Loader2, Cpu, Code2, PlayCircle, Lock, CheckSquare, Server, AlertTriangle
 } from 'lucide-react';
 import { programasService, type ProgramaData } from '../../../api/programas.service';
 import api from '../../../api/axios.config';
@@ -10,12 +10,13 @@ import toast from 'react-hot-toast';
 export default function ProgramasManager() {
   const [programas, setProgramas] = useState<ProgramaData[]>([]);
   const [permisosDisponibles, setPermisosDisponibles] = useState<any[]>([]);
-  const [dominios, setDominios] = useState<any[]>([]); // 🔥 ESTADO PARA DOMINIOS
+  const [dominios, setDominios] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  
   const [formData, setFormData] = useState<ProgramaData>({
     codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined
   });
@@ -26,13 +27,14 @@ export default function ProgramasManager() {
       const [progs, perms, doms] = await Promise.all([
         programasService.obtenerTodos(),
         api.get('/api/permisos').then(r => r.data),
-        api.get('/api/dominios-operativos').then(r => r.data) // 🔥 CARGAMOS DOMINIOS
+        api.get('/api/dominios-operativos').then(r => r.data)
       ]);
       setProgramas(progs || []);
       setPermisosDisponibles(perms || []);
       setDominios(doms || []);
     } catch (error) {
       console.error("Error cargando datos:", error);
+      toast.error("Error al cargar los catálogos del sistema.");
     } finally {
       setLoading(false);
     }
@@ -45,7 +47,11 @@ export default function ProgramasManager() {
   const handleOpenDrawer = (programa?: ProgramaData) => {
     if (programa) {
       setEditingId(programa.id!);
-      setFormData({ ...programa, permisosIds: programa.permisosIds || [] });
+      setFormData({ 
+        ...programa, 
+        permisosIds: programa.permisosIds || [],
+        dominioId: programa.dominioId 
+      });
     } else {
       setEditingId(null);
       setFormData({ codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined });
@@ -58,22 +64,56 @@ export default function ProgramasManager() {
     setEditingId(null);
   };
 
+  // 🔥 MAGIA: Lógica de Dependencias 100% Dinámica (Cero Hardcode)
   const togglePermiso = (permisoId: number) => {
-    const actuales = formData.permisosIds || [];
-    if (actuales.includes(permisoId)) {
-      setFormData({ ...formData, permisosIds: actuales.filter(id => id !== permisoId) });
+    const actuales = new Set(formData.permisosIds || []);
+    
+    if (actuales.has(permisoId)) {
+      // 🛑 INTENTO DE DESMARCAR: Verificamos si alguien más lo necesita
+      const requeridoPor = permisosDisponibles.find(p => 
+        actuales.has(p.id) && p.dependenciasIds?.includes(permisoId)
+      );
+      
+      if (requeridoPor) {
+        toast.error(`No puedes quitar este módulo porque "${requeridoPor.codigo.replace('MOD_', '')}" lo requiere.`);
+        return; // Bloqueamos la acción
+      }
+      
+      actuales.delete(permisoId);
     } else {
-      setFormData({ ...formData, permisosIds: [...actuales, permisoId] });
+      // ✅ INTENTO DE MARCAR: Lo agregamos y auto-marcamos sus dependencias
+      actuales.add(permisoId);
+      
+      const permisoSeleccionado = permisosDisponibles.find(p => p.id === permisoId);
+      if (permisoSeleccionado && permisoSeleccionado.dependenciasIds?.length > 0) {
+        let agregadas = false;
+        permisoSeleccionado.dependenciasIds.forEach((depId: number) => {
+          if (!actuales.has(depId)) {
+             actuales.add(depId);
+             agregadas = true;
+          }
+        });
+        if (agregadas) {
+          toast.success("Dependencias añadidas automáticamente", { icon: '🔗' });
+        }
+      }
     }
+    
+    setFormData({ ...formData, permisosIds: Array.from(actuales) });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const guardarPromise = (async () => {
+      const payload = {
+        ...formData,
+        codigo: formData.codigo.toUpperCase().replace(/\s/g, '_')
+      };
+
       if (editingId) {
-        await programasService.actualizar(editingId, formData);
+        await programasService.actualizar(editingId, payload);
       } else {
-        await programasService.crear(formData);
+        await programasService.crear(payload);
       }
       handleCloseDrawer();
       await cargarDatos();
@@ -168,12 +208,17 @@ export default function ProgramasManager() {
                 <p className="text-sm font-medium text-zinc-600 line-clamp-3 leading-relaxed mb-3">
                   {prog.descripcion || 'Sin descripción detallada.'}
                 </p>
-                {/* Mostramos el dominio asignado si lo tiene */}
-                {prog.dominioNombre && (
-                  <div className="flex items-center gap-1.5 mb-3 text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 border border-indigo-100 w-max px-2 py-1 rounded-md">
+                
+                {prog.dominioNombre ? (
+                  <div className="flex items-center gap-1.5 mb-3 text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 border border-indigo-100 w-max px-2 py-1 rounded-md shadow-sm">
                     <Server className="w-3 h-3" /> {prog.dominioNombre}
                   </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 mb-3 text-[10px] font-extrabold uppercase text-red-600 bg-red-50 border border-red-100 w-max px-2 py-1 rounded-md shadow-sm animate-pulse">
+                    <AlertTriangle className="w-3 h-3" /> Sin Dominio Asignado
+                  </div>
                 )}
+
                 <div className="flex flex-wrap gap-1">
                   {(prog.permisosCodigos || []).slice(0, 3).map(cod => (
                     <span key={cod} className="bg-zinc-100 text-zinc-600 text-[9px] font-bold px-2 py-0.5 rounded border border-zinc-200">{cod.replace('MOD_', '')}</span>
@@ -190,10 +235,10 @@ export default function ProgramasManager() {
                 </span>
                 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => handleOpenDrawer(prog)} className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-lg transition-colors">
+                  <button onClick={() => handleOpenDrawer(prog)} className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-lg transition-colors" title="Editar">
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDelete(prog.id!)} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                  <button onClick={() => handleDelete(prog.id!)} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -242,7 +287,6 @@ export default function ProgramasManager() {
               <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black" placeholder="Ej. Sistema de Inventario Básico" />
             </div>
 
-            {/* 🔥 NUEVO: SELECTOR DE DOMINIO OPERATIVO DINÁMICO */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center gap-1.5">
                 <Server className="w-3.5 h-3.5 text-zinc-400" /> Dominio Operativo (Motor de BD) *
@@ -251,7 +295,7 @@ export default function ProgramasManager() {
                 required 
                 value={formData.dominioId || ''} 
                 onChange={e => setFormData({...formData, dominioId: Number(e.target.value)})} 
-                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold text-zinc-800 focus:bg-white focus:outline-none focus:border-black transition-all cursor-pointer"
+                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold text-zinc-800 focus:bg-white focus:outline-none focus:border-black transition-all cursor-pointer shadow-sm"
               >
                 <option value="" disabled>Seleccionar Dominio Dinámico...</option>
                 {dominios.filter(d => d.activo).map(dom => (
@@ -268,31 +312,48 @@ export default function ProgramasManager() {
               <textarea rows={2} value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black resize-none" placeholder="¿Qué funcionalidades incluye este paquete?" />
             </div>
 
-            {/* 🔥 MÓDULOS SAAS */}
+            {/* 🔥 MÓDULOS SAAS CON COMPROBACIÓN DINÁMICA DE DEPENDENCIAS */}
             <div className="space-y-3 pt-4 border-t border-zinc-100">
               <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-zinc-400" /> Módulos SaaS Incluidos
               </label>
-              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 max-h-48 overflow-y-auto grid grid-cols-2 gap-3 shadow-inner">
+              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 max-h-56 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-3 shadow-inner">
                 {permisosDisponibles.length === 0 ? (
                   <p className="text-xs text-zinc-400 col-span-2 text-center py-2">No hay módulos creados en el sistema.</p>
                 ) : (
                   permisosDisponibles.map(p => {
                     const isChecked = formData.permisosIds?.includes(p.id);
+                    
+                    // Verificamos si este módulo es requerido por otro que YA está chequeado
+                    const isForcedByDependency = permisosDisponibles.some(other => 
+                      formData.permisosIds?.includes(other.id) && other.dependenciasIds?.includes(p.id)
+                    );
+
                     return (
                       <div 
                         key={p.id} 
                         onClick={() => togglePermiso(p.id)}
-                        className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                          isChecked ? 'bg-white border-black shadow-sm' : 'bg-transparent border-transparent hover:bg-zinc-100'
+                        className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
+                          isChecked 
+                            ? isForcedByDependency ? 'bg-zinc-200 border-zinc-300 cursor-not-allowed opacity-80' : 'bg-white border-black cursor-pointer shadow-sm' 
+                            : 'bg-transparent border-transparent hover:bg-zinc-100 cursor-pointer'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-black border-black' : 'bg-white border-zinc-300'}`}>
-                          {isChecked && <CheckCircle2 className="w-3 h-3 text-white" />}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                            isChecked ? (isForcedByDependency ? 'bg-zinc-400 border-zinc-400' : 'bg-black border-black') : 'bg-white border-zinc-300'
+                          }`}>
+                            {isChecked && <CheckCircle2 className="w-3 h-3 text-white" />}
+                          </div>
+                          <p className={`text-xs font-bold truncate ${isChecked ? 'text-black' : 'text-zinc-600'}`} title={p.descripcion}>
+                            {p.codigo.replace('MOD_', 'Módulo ')}
+                          </p>
                         </div>
-                        <div className="min-w-0">
-                          <p className={`text-xs font-bold truncate ${isChecked ? 'text-black' : 'text-zinc-600'}`} title={p.descripcion}>{p.codigo.replace('MOD_', 'Módulo ')}</p>
-                        </div>
+                        
+                        {/* Candado si es dependencia obligatoria */}
+                        {isForcedByDependency && (
+                          <Lock className="w-3.5 h-3.5 text-zinc-500 shrink-0" title="Requerido por otro módulo activo" />
+                        )}
                       </div>
                     )
                   })

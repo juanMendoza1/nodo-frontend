@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Layers, ListTree, Hash, Shield, 
-  Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown, Store,Server
+  Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown, Store, Server
 } from 'lucide-react';
 import { configuracionService } from '../../../api/configuracion.service';
-import toast from 'react-hot-toast'; // 🔥 IMPORTAMOS TOAST
+import toast from 'react-hot-toast'; 
 
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loading }: any) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -185,7 +185,6 @@ export default function ConfiguracionMaster() {
   const handleOpenDrawer = async (item?: any) => {
     if (item) {
       setEditingId(item.id);
-      // 🔥 MAGIA: Esparcimos todo el objeto 'item' para capturar templateMovil y descripcion solos
       setFormData({
         ...item,
         claseId: item.clase?.id || '',
@@ -223,13 +222,16 @@ export default function ConfiguracionMaster() {
     setFormData({ ...formData, [key]: value });
   };
 
-  // 🔥 ACTUALIZACIÓN: Usamos toast.promise para manejar el submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const guardarPromise = (async () => {
       let payload = { ...formData };
       
+      // Transformaciones para mayúsculas y limpieza de espacios en códigos
+      if (payload.codigo) payload.codigo = payload.codigo.toUpperCase().trim().replace(/\s/g, '_');
+      if (activeTab === 'roles' && payload.nombre) payload.nombre = payload.nombre.toUpperCase().trim();
+
       if (activeTab === 'estructuras' && payload.claseId) payload.clase = { id: Number(payload.claseId) };
       
       if (activeTab === 'unidades' && payload.estructuraId) {
@@ -257,7 +259,6 @@ export default function ConfiguracionMaster() {
     });
   };
 
-  // 🔥 ACTUALIZACIÓN: Usamos toast.promise para manejar el borrado
   const handleDelete = async (id: number) => {
     if (window.confirm(`¿Estás seguro de eliminar este registro de ${tabActivo.title}?`)) {
       const eliminarPromise = (async () => {
@@ -504,7 +505,7 @@ export default function ConfiguracionMaster() {
                     type={field.type} 
                     placeholder={field.placeholder}
                     value={formData[field.key] || ''}
-                    onChange={(e) => handleChange(field.key, activeTab === 'roles' && field.key === 'nombre' ? e.target.value.toUpperCase() : e.target.value)}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
                     className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all"
                   />
                 )}
@@ -517,7 +518,7 @@ export default function ConfiguracionMaster() {
                 id="estadoActivo"
                 checked={formData.activo !== false}
                 onChange={(e) => handleChange('activo', e.target.checked)}
-                className="w-4 h-4 text-black border-zinc-300 rounded focus:ring-black accent-black"
+                className="w-4 h-4 text-black border-zinc-300 rounded focus:ring-black accent-black cursor-pointer"
               />
               <label htmlFor="estadoActivo" className="text-sm font-bold text-zinc-700 cursor-pointer">
                 Registro Activo

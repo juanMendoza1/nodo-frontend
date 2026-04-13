@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, ShieldCheck, LogOut, Database, UserSquare2, 
-  CreditCard, Search, Plus, Menu, Bell, Settings , Cpu, Calculator,FileText,Receipt,FileSpreadsheet
+  CreditCard, Search, Plus, Menu, Bell, Settings, Cpu, 
+  Calculator, FileText, Receipt, FileSpreadsheet, Puzzle // 🔥 Importamos Puzzle
 } from 'lucide-react';
 import TercerosManager from './views/TercerosManager';
 import ConfiguracionMaster from './views/ConfiguracionMaster';
@@ -15,7 +16,7 @@ import ConceptosManager from './views/ConceptosManager';
 import FacturacionSaaS from './views/FacturacionSaaS';
 import DocumentosManager from './views/DocumentosManager';
 import NotasManager from './views/NotasManager';
-
+import ModulosManager from './views/ModulosManager'; // 🔥 Importamos el nuevo Manager
 
 // ============================================================================
 // COMPONENTE GENÉRICO TEMPORAL (Solo para Usuarios y Suscripciones por ahora)
@@ -100,6 +101,7 @@ export default function SuperAdminDashboard() {
   const menuItems = [
     { id: 'terceros', label: 'Terceros (Base)', icon: Database },
     { id: 'empresas', label: 'Comercios (Tenants)', icon: Building2 },
+    { id: 'modulos', label: 'Módulos (Fichas)', icon: Puzzle }, // 🔥 Nueva Opción
     { id: 'programas', label: 'Programas (SaaS)', icon: Cpu },
     { id: 'conceptos', label: 'Catálogo Conceptos', icon: FileText }, 
     { id: 'esquemas', label: 'Esquemas de Cálculo', icon: Calculator },
@@ -121,7 +123,7 @@ export default function SuperAdminDashboard() {
           <span className="font-black italic text-lg tracking-tight text-gray-900">NODO MASTER</span>
         </div>
         
-        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto custom-scrollbar">
           <p className="px-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">Administración Global</p>
           {menuItems.map((item) => (
             <button 
@@ -178,17 +180,18 @@ export default function SuperAdminDashboard() {
           {/* MÓDULOS CONECTADOS */}
           {activeTab === 'terceros' && <TercerosManager />}
           {activeTab === 'empresas' && <EmpresasManager />}
-          {activeTab === 'configuracion' && <ConfiguracionMaster />}
-
-          {/* MÓDULOS PENDIENTES DE VISTA PROPIA */}
-          {activeTab === 'usuarios' && <UsuariosManager />}
-
-          {activeTab === 'suscripciones' && <SuscripcionesManager />}
-          {activeTab === 'facturacion_saas' && <FacturacionSaaS />}
+          
+          {/* 🔥 VISTA DE MÓDULOS */}
+          {activeTab === 'modulos' && <ModulosManager />}
+          
           {activeTab === 'programas' && <ProgramasManager />}
           {activeTab === 'conceptos' && <ConceptosManager />}
           {activeTab === 'esquemas' && <LiquidacionesMaster />}
           {activeTab === 'libro_documentos' && <DocumentosManager />}
+          {activeTab === 'usuarios' && <UsuariosManager />}
+          {activeTab === 'suscripciones' && <SuscripcionesManager />}
+          {activeTab === 'facturacion_saas' && <FacturacionSaaS />}
+          {activeTab === 'configuracion' && <ConfiguracionMaster />}
           {activeTab === 'notas' && <NotasManager />}
         </div>
       </main>
