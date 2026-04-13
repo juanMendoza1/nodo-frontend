@@ -1,3 +1,4 @@
+// src/api/documentos.service.ts
 import api from './axios.config';
 
 export const documentosService = {
@@ -14,9 +15,11 @@ export const documentosService = {
     return response.data;
   },
 
-  // 3. Consultas para reportes y tablas
-  obtenerHistorial: async (empresaId: number) => {
-    const response = await api.get(`/api/documentos/empresa/${empresaId}/historial`);
+  // 3. Consultas para reportes y tablas (AHORA SOPORTA FILTROS Y PAGINACIÓN)
+  obtenerHistorial: async (empresaId: number, page: number = 0, size: number = 10) => {
+    const response = await api.get(`/api/documentos/empresa/${empresaId}/historial`, {
+      params: { page, size }
+    });
     return response.data;
   },
 
@@ -33,6 +36,24 @@ export const documentosService = {
   // 4. Poderes de Administrador
   reliquidar: async (id: number) => {
     const response = await api.post(`/api/documentos/${id}/reliquidar`);
+    return response.data;
+  },
+
+  // ==========================================
+  // 🔥 NUEVOS MÉTODOS PARA NOTAS CONTABLES
+  // ==========================================
+  
+  // Busca una factura específica por consecutivo para usarla como padre
+  buscarPadrePorConsecutivo: async (empresaId: number, consecutivo: string) => {
+    const response = await api.get(`/api/documentos/empresa/${empresaId}/buscar-padre`, {
+      params: { consecutivo }
+    });
+    return response.data;
+  },
+
+  // Emite la Nota Contable (NC/ND) afectando los saldos
+  emitirNota: async (payload: any) => {
+    const response = await api.post('/api/documentos/emitir-nota', payload);
     return response.data;
   }
 };
