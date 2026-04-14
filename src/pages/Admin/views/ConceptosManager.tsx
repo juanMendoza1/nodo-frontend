@@ -125,21 +125,42 @@ export default function ConceptosManager() {
       else if (item.esGlobal) alcanceInicial = 'GLOBAL';
 
       setFormData({
-        codigo: item.codigo, nombre: item.nombre, tipoCalculo: item.tipoCalculo,
-        valorFijo: item.valorFijo || '', formula: item.formula || '',
-        esRecaudable: item.esRecaudable !== false, financiable: item.financiable || false, 
-        generaInteres: item.generaInteres || false, aplicaIva: item.aplicaIva || false, 
+        codigo: item.codigo, 
+        nombre: item.nombre, 
+        tipoCalculo: item.tipoCalculo,
+        naturaleza: item.naturaleza || 'SUMA', // 🔥 Carga paramétrica de Naturaleza
+        valorFijo: item.valorFijo || '', 
+        formula: item.formula || '',
+        esRecaudable: item.esRecaudable !== false, 
+        financiable: item.financiable || false, 
+        generaInteres: item.generaInteres || false, 
+        aplicaIva: item.aplicaIva || false, 
         esFuncion: item.esFuncion || false,
-        alcance: alcanceInicial, programaId: item.programa?.id || '', 
-        empresaId: item.empresa?.id || '', estructuraAgrupadoraId: item.estructuraAgrupadora?.id || '',
+        alcance: alcanceInicial, 
+        programaId: item.programa?.id || '', 
+        empresaId: item.empresa?.id || '', 
+        estructuraAgrupadoraId: item.estructuraAgrupadora?.id || '',
         activo: item.activo !== false
       });
     } else {
       setEditingId(null);
       setFormData({ 
-        codigo: '', nombre: '', tipoCalculo: 'DINAMICO', valorFijo: '', formula: '', 
-        esRecaudable: true, financiable: false, generaInteres: false, aplicaIva: false, 
-        esFuncion: false, alcance: 'GLOBAL', programaId: '', empresaId: '', estructuraAgrupadoraId: '', activo: true 
+        codigo: '', 
+        nombre: '', 
+        tipoCalculo: 'DINAMICO', 
+        naturaleza: 'SUMA', // 🔥 Valor por defecto al crear
+        valorFijo: '', 
+        formula: '', 
+        esRecaudable: true, 
+        financiable: false, 
+        generaInteres: false, 
+        aplicaIva: false, 
+        esFuncion: false, 
+        alcance: 'GLOBAL', 
+        programaId: '', 
+        empresaId: '', 
+        estructuraAgrupadoraId: '', 
+        activo: true 
       });
     }
     setIsDrawerOpen(true);
@@ -185,7 +206,6 @@ export default function ConceptosManager() {
       usuario: usuarioData?.usuarioId ? { id: usuarioData.usuarioId } : null,
       
       esGlobal: formData.alcance === 'GLOBAL',
-      // 🔥 Si es NODO o si el programaId está vacío (Transversal), enviamos null al backend
       programa: (formData.alcance === 'NODO' || !formData.programaId) ? null : { id: formData.programaId },
       empresa: formData.alcance === 'LOCAL' ? { id: formData.empresaId } : { id: NODO_MASTER_ID }
     };
@@ -221,7 +241,6 @@ export default function ConceptosManager() {
     c.codigo.toLowerCase().includes(search.toLowerCase()) || c.nombre.toLowerCase().includes(search.toLowerCase())
   );
 
-  // 🔥 VALIDACIÓN MEJORADA: Si es GLOBAL, programaId no es obligatorio
   const isFormValid = formData.codigo?.trim() && 
                       formData.nombre?.trim() && 
                       formData.estructuraAgrupadoraId &&
@@ -279,6 +298,13 @@ export default function ConceptosManager() {
                       }`}>
                         {c.tipoCalculo}
                       </span>
+                      {/* 🔥 BADGE VISUAL DE NATURALEZA */}
+                      <span className={`ml-2 px-2 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest border ${
+                        c.naturaleza === 'RESTA' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                      }`}>
+                        {c.naturaleza === 'RESTA' ? 'RESTA (-)' : 'SUMA (+)'}
+                      </span>
+
                       {c.tipoCalculo === 'ESTATICO' && <span className="block mt-1 text-xs font-mono font-bold text-zinc-500">${c.valorFijo}</span>}
                       {c.tipoCalculo === 'FORMULA' && <span className="block mt-1 text-[10px] font-mono text-zinc-600 truncate max-w-[150px]" title={c.formula}>{c.formula}</span>}
                     </td>
@@ -380,7 +406,6 @@ export default function ConceptosManager() {
                    <label className="text-[11px] font-extrabold uppercase text-zinc-500 flex items-center gap-1">
                      Módulo SaaS {formData.alcance === 'GLOBAL' && <span className="lowercase font-medium text-zinc-400">(Opcional)</span>}
                    </label>
-                   {/* 🔥 SE AÑADE LA OPCIÓN TRANSVERSAL SI ES GLOBAL */}
                    <SearchableSelect 
                      value={formData.programaId} 
                      options={formData.alcance === 'GLOBAL' ? [{ id: '', nombre: '--- Ninguno (Transversal) ---' }, ...programas] : programas} 
@@ -405,13 +430,24 @@ export default function ConceptosManager() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-extrabold uppercase text-zinc-500">Tipo de Cálculo *</label>
-              <select value={formData.tipoCalculo} onChange={e => setFormData({...formData, tipoCalculo: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold focus:bg-white focus:border-black cursor-pointer">
-                <option value="DINAMICO">Dinámico (Viene de la Venta/Tablet)</option>
-                <option value="ESTATICO">Estático (Valor fijo paramétrico)</option>
-                <option value="FORMULA">Fórmula (Evaluación Matemática)</option>
-              </select>
+            {/* 🔥 NUEVO BLOQUE: TIPO DE CÁLCULO Y NATURALEZA CONTABLE */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-extrabold uppercase text-zinc-500">Tipo de Cálculo *</label>
+                <select value={formData.tipoCalculo} onChange={e => setFormData({...formData, tipoCalculo: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold focus:bg-white focus:border-black cursor-pointer">
+                  <option value="DINAMICO">Dinámico (Viene de la Venta/Tablet)</option>
+                  <option value="ESTATICO">Estático (Valor fijo paramétrico)</option>
+                  <option value="FORMULA">Fórmula (Evaluación Matemática)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-extrabold uppercase text-zinc-500">Naturaleza Contable *</label>
+                <select value={formData.naturaleza} onChange={e => setFormData({...formData, naturaleza: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold focus:bg-white focus:border-black cursor-pointer">
+                  <option value="SUMA">Suma (+)</option>
+                  <option value="RESTA">Resta (-)</option>
+                </select>
+              </div>
             </div>
 
             {formData.tipoCalculo === 'ESTATICO' && (
@@ -543,7 +579,7 @@ export default function ConceptosManager() {
                  
                  <label className="flex items-center gap-3 cursor-pointer">
                    <input type="checkbox" checked={formData.esRecaudable} onChange={e => setFormData({...formData, esRecaudable: e.target.checked})} className="w-4 h-4 accent-black" />
-                   <span className="text-sm font-bold text-zinc-700">Es Recaudable <span className="text-xs font-medium text-zinc-500 block">(Genera Cobro)</span></span>
+                   <span className="text-sm font-bold text-zinc-700">Es Recaudable <span className="text-xs font-medium text-zinc-500 block">(Afecta Totales)</span></span>
                  </label>
 
                  <label className="flex items-center gap-3 cursor-pointer">
