@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Building2, Search, Plus, Edit2, Trash2, X, CheckCircle2, Loader2, ChevronDown, Store } from 'lucide-react';
-import { empresasService } from '../../../api/empresas.service';
 import { tercerosService } from '../../../api/terceros.service';
-import api from '../../../api/axios.config'; // Usado para traer los giros de negocio temporalmente
+import api from '../../../api/axios.config';
+
+// 🔥 IMPORTAMOS NUESTROS NUEVOS HOOKS DE REACT QUERY
+import { useEmpresas, useMutateEmpresa, useDeleteEmpresa } from '../../../hooks/queries/useEmpresas';
 
 // ============================================================================
-// COMPONENTE: SELECT BUSCADOR INTELIGENTE (Combobox)
+// COMPONENTE: SELECT BUSCADOR INTELIGENTE (Combobox) - (Intacto)
 // ============================================================================
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loading }: any) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -85,11 +87,9 @@ const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loa
 // COMPONENTE PRINCIPAL
 // ============================================================================
 export default function EmpresasManager() {
-  const [empresas, setEmpresas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   
-  // Listas paramétricas para el formulario
+  // Listas paramétricas para el formulario (Estas también las pasaremos a React Query después)
   const [terceros, setTerceros] = useState<any[]>([]);
   const [giros, setGiros] = useState<any[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -99,27 +99,16 @@ export default function EmpresasManager() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState<any>({});
 
-  const cargarEmpresas = async () => {
-    setLoading(true);
-    try {
-      const data = await empresasService.obtenerTodas();
-      setEmpresas(data || []);
-    } catch (error) {
-      console.error("Error cargando empresas:", error);
-      setEmpresas([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    cargarEmpresas();
-  }, []);
+  // =======================================================================
+  // 🔥 MAGIA DE REACT QUERY AQUÍ: ¡Adiós useEffects y useStates confusos!
+  // =======================================================================
+  const { data: empresas = [], isLoading, isError } = useEmpresas();
+  const mutateEmpresa = useMutateEmpresa();
+  const deleteEmpresa = useDeleteEmpresa();
 
   const cargarOpcionesFormulario = async () => {
     setLoadingOptions(true);
     try {
-      // Cargamos Terceros (SuperAdmin ve todos) y Giros de Negocio
       const [tercerosRes, girosRes] = await Promise.all([
         tercerosService.obtenerTodosAdmin(),
         api.get('/api/giros-negocio').then(r => r.data).catch(() => []) 
@@ -156,41 +145,30 @@ export default function EmpresasManager() {
     setEditingId(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      // Ensamblamos el JSON tal como lo espera Spring Boot JPA
-      const payload = {
-        nombreComercial: formData.nombreComercial,
-        activo: formData.activo,
-        tercero: formData.terceroId ? { id: Number(formData.terceroId) } : null,
-        giroNegocio: formData.giroNegocioId ? { id: Number(formData.giroNegocioId) } : null
-      };
+    
+    const payload = {
+      nombreComercial: formData.nombreComercial,
+      activo: formData.activo,
+      tercero: formData.terceroId ? { id: Number(formData.terceroId) } : undefined,
+      giroNegocio: formData.giroNegocioId ? { id: Number(formData.giroNegocioId) } : undefined
+    };
 
-      if (editingId) {
-        await empresasService.actualizar(editingId, payload);
-      } else {
-        await empresasService.crear(payload);
-      }
-      handleCloseDrawer();
-      cargarEmpresas();
-    } catch (error: any) {
-      alert(error.response?.data?.message || "Error al guardar la empresa");
-    }
+    // 🔥 Llamamos a la mutación. Cuando tenga éxito, el Drawer se cierra solo.
+    mutateEmpresa.mutate(
+      { id: editingId, payload },
+      { onSuccess: () => handleCloseDrawer() }
+    );
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = (id: number) => {
     if (window.confirm('¿Estás seguro de eliminar este comercio permanentemente?')) {
-      try {
-        await empresasService.eliminar(id);
-        cargarEmpresas();
-      } catch (error) {
-        alert("No se puede eliminar porque la empresa tiene usuarios, tablets o histórico asociado.");
-      }
+      deleteEmpresa.mutate(id);
     }
   };
 
-  const filteredEmpresas = empresas.filter(e => 
+  const filteredEmpresas = empresas.filter((e: any) => 
     e.nombreComercial?.toLowerCase().includes(search.toLowerCase()) || 
     e.tercero?.documento?.includes(search)
   );
@@ -238,12 +216,16 @@ export default function EmpresasManager() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {loading ? (
+              {isLoading ? ( // Usamos el isLoading de React Query
                 <tr>
                   <td colSpan={6} className="p-12 text-center">
                     <Loader2 className="w-8 h-8 text-black animate-spin mx-auto mb-3" />
                     <p className="text-zinc-500 font-bold text-sm">Cargando portafolio de negocios...</p>
                   </td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center text-red-500">Error de conexión al servidor.</td>
                 </tr>
               ) : filteredEmpresas.length === 0 ? (
                 <tr>
@@ -253,7 +235,7 @@ export default function EmpresasManager() {
                   </td>
                 </tr>
               ) : (
-                filteredEmpresas.map((e) => (
+                filteredEmpresas.map((e: any) => (
                   <tr key={e.id} className="hover:bg-zinc-50 transition-colors group">
                     <td className="p-5 pl-6 text-sm font-black text-zinc-400">#{e.id}</td>
                     <td className="p-5 text-sm font-black text-zinc-900">{e.nombreComercial}</td>
@@ -286,7 +268,12 @@ export default function EmpresasManager() {
                         <button onClick={() => handleOpenDrawer(e)} className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-lg transition-colors">
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleDelete(e.id)} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        {/* Bloqueamos el botón si la mutación de borrar está en curso */}
+                        <button 
+                          onClick={() => handleDelete(e.id)} 
+                          disabled={deleteEmpresa.isPending}
+                          className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -387,10 +374,11 @@ export default function EmpresasManager() {
             <button 
               type="submit" 
               form="empresaForm"
-              disabled={!formData.terceroId || !formData.giroNegocioId || !formData.nombreComercial}
+              disabled={!formData.terceroId || !formData.giroNegocioId || !formData.nombreComercial || mutateEmpresa.isPending}
               className="flex-1 px-4 py-3 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 shadow-md hover:shadow-lg transition-all text-sm flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <CheckCircle2 className="w-4 h-4" /> {editingId ? 'Actualizar' : 'Guardar'}
+              {mutateEmpresa.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} 
+              {editingId ? 'Actualizar' : 'Guardar'}
             </button>
           </div>
         </div>

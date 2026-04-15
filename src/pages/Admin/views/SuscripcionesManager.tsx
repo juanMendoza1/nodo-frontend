@@ -2,13 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   CreditCard, Search, Plus, Edit2, Trash2, X, 
-  CheckCircle2, Loader2, ChevronDown, MonitorSmartphone
+  CheckCircle2, Loader2, ChevronDown, MonitorSmartphone, RefreshCcw
 } from 'lucide-react';
 import { suscripcionesService, type SuscripcionData } from '../../../api/suscripciones.service';
 import { empresasService } from '../../../api/empresas.service';
 import { programasService } from '../../../api/programas.service';
+import { ciclosService } from '../../../api/ciclos.service'; // 🔥 IMPORTAMOS EL SERVICIO DE CICLOS
 
-// --- COMPONENTE SEARCHABLE SELECT (Reutilizado) ---
+// --- COMPONENTE SEARCHABLE SELECT (Reutilizado y Pro) ---
 const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loading, labelKey = 'nombre' }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,14 +83,15 @@ export default function SuscripcionesManager() {
   // Listas paramétricas
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [programas, setProgramas] = useState<any[]>([]);
+  const [ciclos, setCiclos] = useState<any[]>([]); // 🔥 NUEVO ESTADO PARA CICLOS
   const [loadingOptions, setLoadingOptions] = useState(false);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   
-  // Estructura del formulario
+  // Estructura del formulario actualizada
   const [formData, setFormData] = useState<any>({
-    empresaId: '', programaId: '', maxDispositivos: 1, activo: true, fechaVencimiento: ''
+    empresaId: '', programaId: '', cicloId: '', maxDispositivos: 1, activo: true, fechaVencimiento: ''
   });
 
   const cargarSuscripciones = async () => {
@@ -112,12 +114,15 @@ export default function SuscripcionesManager() {
   const cargarOpcionesFormulario = async () => {
     setLoadingOptions(true);
     try {
-      const [empRes, progRes] = await Promise.all([
+      // 🔥 AGREGAMOS LA LLAMADA A LOS CICLOS
+      const [empRes, progRes, ciclosRes] = await Promise.all([
         empresasService.obtenerTodas(),
-        programasService.obtenerTodos()
+        programasService.obtenerTodos(),
+        ciclosService.obtenerTodos()
       ]);
       setEmpresas(empRes || []);
       setProgramas(progRes || []);
+      setCiclos(ciclosRes || []);
     } catch (error) {
       console.error("Error opciones:", error);
     } finally {
@@ -125,20 +130,21 @@ export default function SuscripcionesManager() {
     }
   };
 
-  const handleOpenDrawer = (sub?: SuscripcionData) => {
+  const handleOpenDrawer = (sub?: any) => {
     cargarOpcionesFormulario();
     if (sub) {
       setEditingId(sub.id!);
       setFormData({
         empresaId: sub.empresa?.id || '',
         programaId: sub.programa?.id || '',
+        cicloId: sub.cicloFacturacion?.id || '', // 🔥 CARGAMOS EL CICLO ACTUAL
         maxDispositivos: sub.maxDispositivos,
         activo: sub.activo !== false,
         fechaVencimiento: sub.fechaVencimiento ? sub.fechaVencimiento.substring(0, 10) : ''
       });
     } else {
       setEditingId(null);
-      setFormData({ empresaId: '', programaId: '', maxDispositivos: 1, activo: true, fechaVencimiento: '' });
+      setFormData({ empresaId: '', programaId: '', cicloId: '', maxDispositivos: 1, activo: true, fechaVencimiento: '' });
     }
     setIsDrawerOpen(true);
   };
@@ -156,7 +162,8 @@ export default function SuscripcionesManager() {
         activo: formData.activo,
         fechaVencimiento: formData.fechaVencimiento ? `${formData.fechaVencimiento}T23:59:59` : null,
         empresa: { id: Number(formData.empresaId) },
-        programa: { id: Number(formData.programaId) }
+        programa: { id: Number(formData.programaId) },
+        cicloFacturacion: { id: Number(formData.cicloId) } // 🔥 INYECTAMOS EL CICLO OBLIGATORIO
       };
 
       if (editingId) {
@@ -195,7 +202,7 @@ export default function SuscripcionesManager() {
           <h2 className="text-3xl font-black text-zinc-900 tracking-tight flex items-center gap-3">
             <CreditCard className="w-8 h-8 text-black" /> Licencias y Suscripciones
           </h2>
-          <p className="text-sm text-zinc-500 font-medium mt-1">Control de cupos por comercio y programas habilitados.</p>
+          <p className="text-sm text-zinc-500 font-medium mt-1">Control de cupos por comercio y asignación a ciclos de cobro.</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-72">
@@ -216,6 +223,7 @@ export default function SuscripcionesManager() {
               <tr className="bg-zinc-50/80 border-b border-zinc-200 text-[10px] uppercase tracking-widest text-zinc-500 font-extrabold">
                 <th className="p-5 pl-6">Comercio (Tenant)</th>
                 <th className="p-5">Módulo (SaaS)</th>
+                <th className="p-5">Ciclo de Cobro</th> {/* 🔥 NUEVA COLUMNA */}
                 <th className="p-5">Dispositivos</th>
                 <th className="p-5">F. Vencimiento</th>
                 <th className="p-5">Estado</th>
@@ -224,16 +232,24 @@ export default function SuscripcionesManager() {
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {loading ? (
-                <tr><td colSpan={6} className="p-12 text-center"><Loader2 className="w-8 h-8 text-black animate-spin mx-auto mb-3" /></td></tr>
+                <tr><td colSpan={7} className="p-12 text-center"><Loader2 className="w-8 h-8 text-black animate-spin mx-auto mb-3" /></td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="p-12 text-center text-zinc-500 font-bold">No hay suscripciones registradas.</td></tr>
+                <tr><td colSpan={7} className="p-12 text-center text-zinc-500 font-bold">No hay suscripciones registradas.</td></tr>
               ) : (
-                filtered.map((s) => {
+                filtered.map((s: any) => {
                    const cuposAgotados = s.dispositivosActivos! >= s.maxDispositivos;
                    return (
                   <tr key={s.id} className="hover:bg-zinc-50 transition-colors group">
                     <td className="p-5 pl-6 text-sm font-black text-zinc-900">{s.empresa?.nombreComercial}</td>
                     <td className="p-5 text-sm font-bold text-zinc-600">{s.programa?.nombre}</td>
+                    
+                    {/* 🔥 MOSTRAMOS EL CICLO */}
+                    <td className="p-5">
+                      <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-zinc-600 bg-zinc-100 border border-zinc-200 px-2 py-1 rounded-lg uppercase tracking-wider w-fit">
+                        <RefreshCcw className="w-3 h-3 text-zinc-400" />
+                        {s.cicloFacturacion?.nombre || 'Sin Ciclo Asignado'}
+                      </span>
+                    </td>
                     
                     <td className="p-5">
                       <div className="flex items-center gap-2">
@@ -302,7 +318,17 @@ export default function SuscripcionesManager() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* 🔥 NUEVO CAMPO: CICLO DE FACTURACIÓN OBLIGATORIO */}
+            <div className="space-y-1.5 pt-2 border-t border-zinc-100">
+              <label className="text-[11px] font-extrabold uppercase text-zinc-500">Ciclo de Facturación *</label>
+              <SearchableSelect 
+                value={formData.cicloId} options={ciclos} onChange={(v: any) => setFormData({...formData, cicloId: v})}
+                placeholder="Asignar al molde de cobro..." loading={loadingOptions} labelKey="nombre" disabled={!!editingId}
+              />
+              <p className="text-[10px] text-zinc-400 font-medium">Requerido para que el motor liquide automáticamente a fin de mes.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-extrabold uppercase text-zinc-500">Cupos Tablets *</label>
                 <input required type="number" min="1" value={formData.maxDispositivos} onChange={e => setFormData({...formData, maxDispositivos: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black" />
@@ -322,7 +348,9 @@ export default function SuscripcionesManager() {
 
         <div className="p-6 border-t border-zinc-100 bg-zinc-50 flex gap-3">
           <button type="button" onClick={handleCloseDrawer} className="flex-1 px-4 py-3 rounded-xl border border-zinc-200 text-zinc-600 font-bold hover:bg-zinc-100 text-sm">Cancelar</button>
-          <button type="submit" form="subForm" disabled={!formData.empresaId || !formData.programaId} className="flex-1 px-4 py-3 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 shadow-md text-sm flex justify-center items-center gap-2 disabled:opacity-50">
+          
+          {/* 🔥 VALIDAMOS QUE TENGA EMPRESA, PROGRAMA Y CICLO */}
+          <button type="submit" form="subForm" disabled={!formData.empresaId || !formData.programaId || !formData.cicloId} className="flex-1 px-4 py-3 rounded-xl bg-black text-white font-bold hover:bg-zinc-800 shadow-md text-sm flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
             <CheckCircle2 className="w-4 h-4" /> {editingId ? 'Actualizar' : 'Guardar'}
           </button>
         </div>

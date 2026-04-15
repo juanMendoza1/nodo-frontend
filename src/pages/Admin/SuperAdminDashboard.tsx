@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Building2, ShieldCheck, LogOut, Database, UserSquare2, 
   CreditCard, Search, Plus, Menu, Bell, Settings, Cpu, 
-  Calculator, FileText, Receipt, FileSpreadsheet, Puzzle // 🔥 Importamos Puzzle
+  Calculator, FileText, Receipt, FileSpreadsheet, Puzzle, RefreshCcw // 🔥 Agregamos RefreshCcw
 } from 'lucide-react';
 import TercerosManager from './views/TercerosManager';
 import ConfiguracionMaster from './views/ConfiguracionMaster';
@@ -16,7 +16,8 @@ import ConceptosManager from './views/ConceptosManager';
 import FacturacionSaaS from './views/FacturacionSaaS';
 import DocumentosManager from './views/DocumentosManager';
 import NotasManager from './views/NotasManager';
-import ModulosManager from './views/ModulosManager'; // 🔥 Importamos el nuevo Manager
+import ModulosManager from './views/ModulosManager';
+import CiclosManager from './views/CiclosManager'; // 🔥 Importamos el nuevo Manager
 
 // ============================================================================
 // COMPONENTE GENÉRICO TEMPORAL (Solo para Usuarios y Suscripciones por ahora)
@@ -98,16 +99,18 @@ export default function SuperAdminDashboard() {
     }
   }, [navigate]);
 
+  // 🔥 Menú actualizado con la nueva ruta
   const menuItems = [
     { id: 'terceros', label: 'Terceros (Base)', icon: Database },
     { id: 'empresas', label: 'Comercios (Tenants)', icon: Building2 },
-    { id: 'modulos', label: 'Módulos (Fichas)', icon: Puzzle }, // 🔥 Nueva Opción
+    { id: 'modulos', label: 'Módulos (Fichas)', icon: Puzzle },
     { id: 'programas', label: 'Programas (SaaS)', icon: Cpu },
     { id: 'conceptos', label: 'Catálogo Conceptos', icon: FileText }, 
     { id: 'esquemas', label: 'Esquemas de Cálculo', icon: Calculator },
     { id: 'libro_documentos', label: 'Libro de Documentos', icon: FileText },
     { id: 'usuarios', label: 'Usuarios y Accesos', icon: UserSquare2 },
     { id: 'suscripciones', label: 'Suscripciones', icon: CreditCard },
+    { id: 'ciclos', label: 'Ciclos de Facturación', icon: RefreshCcw }, // 🔥 Nueva Opción
     { id: 'facturacion_saas', label: 'Facturación SaaS', icon: Receipt },
     { id: 'configuracion', label: 'Parametrización', icon: Settings },
     { id: 'notas', label: 'Notas (NC/ND)', icon: FileSpreadsheet },
@@ -176,20 +179,18 @@ export default function SuperAdminDashboard() {
 
         {/* ÁREA DE TRABAJO (VISTAS CRUD) */}
         <div className="flex-1 overflow-auto p-6 lg:p-8 bg-gray-50/50">
-          
           {/* MÓDULOS CONECTADOS */}
           {activeTab === 'terceros' && <TercerosManager />}
           {activeTab === 'empresas' && <EmpresasManager />}
-          
-          {/* 🔥 VISTA DE MÓDULOS */}
           {activeTab === 'modulos' && <ModulosManager />}
-          
           {activeTab === 'programas' && <ProgramasManager />}
           {activeTab === 'conceptos' && <ConceptosManager />}
           {activeTab === 'esquemas' && <LiquidacionesMaster />}
           {activeTab === 'libro_documentos' && <DocumentosManager />}
           {activeTab === 'usuarios' && <UsuariosManager />}
           {activeTab === 'suscripciones' && <SuscripcionesManager />}
+          {/* 🔥 VISTA DE CICLOS */}
+          {activeTab === 'ciclos' && <CiclosManager />}
           {activeTab === 'facturacion_saas' && <FacturacionSaaS />}
           {activeTab === 'configuracion' && <ConfiguracionMaster />}
           {activeTab === 'notas' && <NotasManager />}

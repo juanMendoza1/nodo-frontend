@@ -15,6 +15,11 @@ export const documentosService = {
     return response.data;
   },
 
+  liquidarLote: async (payload: any) => {
+    const { data } = await api.post('/api/documentos/liquidar-lote', payload);
+    return data;
+  },
+
   // 3. Consultas para reportes y tablas (AHORA SOPORTA FILTROS Y PAGINACIÓN)
   obtenerHistorial: async (empresaId: number, page: number = 0, size: number = 10) => {
     const response = await api.get(`/api/documentos/empresa/${empresaId}/historial`, {

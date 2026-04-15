@@ -5,6 +5,7 @@ export interface SuscripcionData {
   id?: number;
   empresa?: { id: number; nombreComercial?: string };
   programa?: { id: number; nombre?: string; codigo?: string };
+  cicloFacturacion?: { id: number; nombre?: string };
   maxDispositivos: number;
   dispositivosActivos?: number;
   fechaVencimiento?: string | null;
