@@ -60,5 +60,9 @@ export const documentosService = {
   emitirNota: async (payload: any) => {
     const response = await api.post('/api/documentos/emitir-nota', payload);
     return response.data;
-  }
+  },
+  aprobarLote: async (cicloId: number, periodoId: number) => {
+    const response = await api.put('/api/documentos/lote/aprobar', null, { params: { cicloId, periodoId } });
+    return response.data;
+  },
 };

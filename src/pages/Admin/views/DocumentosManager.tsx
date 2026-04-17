@@ -1,8 +1,8 @@
 // src/pages/Admin/views/DocumentosManager.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  FileText, Search, Filter, Eye, RefreshCcw, X, Printer, Receipt,
-  Building2, Loader2, ChevronLeft, ChevronRight, AlertCircle, Plus
+  FileText, Search, Eye, RefreshCcw, X, Printer, Receipt,
+  Loader2, ChevronLeft, ChevronRight, Plus
 } from 'lucide-react';
 import { documentosService } from '../../../api/documentos.service';
 import { empresasService } from '../../../api/empresas.service';
@@ -33,6 +33,7 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
 
   useEffect(() => {
     if (empresaId) cargarDocumentos();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId, page]);
 
   // Búsqueda con delay para no saturar el servidor
@@ -44,6 +45,7 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
       }
     }, 500);
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroTexto]);
 
   const cargarDocumentos = async () => {
@@ -125,6 +127,8 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
                 <th className="p-4 pl-6">ID / Consecutivo</th>
                 <th className="p-4">Emisión</th>
                 <th className="p-4">Tercero / Beneficiario</th>
+                <th className="p-4">Ciclo</th>
+                <th className="p-4">Periodo (Fechas)</th>
                 <th className="p-4 text-right">Total Facturado</th>
                 <th className="p-4 text-right">Total Saldo</th>
                 <th className="p-4 text-center">Estado</th>
@@ -133,9 +137,9 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
             </thead>
             <tbody className="divide-y divide-zinc-50">
               {loading ? (
-                <tr><td colSpan={7} className="p-10 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-zinc-300" /></td></tr>
+                <tr><td colSpan={9} className="p-10 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-zinc-300" /></td></tr>
               ) : documentos.length === 0 ? (
-                <tr><td colSpan={7} className="p-10 text-center text-zinc-400 font-bold text-sm">No hay registros.</td></tr>
+                <tr><td colSpan={9} className="p-10 text-center text-zinc-400 font-bold text-sm">No hay registros.</td></tr>
               ) : (
                 documentos.map((doc) => (
                   <tr key={doc.id} className="hover:bg-zinc-50/50 transition-colors group">
@@ -150,6 +154,36 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
                       <p className="text-xs font-black text-zinc-700">{doc.tercero?.nombreCompleto}</p>
                       <p className="text-[9px] font-bold text-zinc-400">NIT: {doc.tercero?.documento}</p>
                     </td>
+
+                    {/* CELDA DEL CICLO */}
+                    <td className="p-4">
+                      {doc.cicloFacturacion ? (
+                         <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-md w-max">
+                           {doc.cicloFacturacion.nombre}
+                         </span>
+                      ) : (
+                         <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 bg-zinc-100 border border-zinc-200 px-2 py-1 rounded-md w-max">
+                           Venta Directa
+                         </span>
+                      )}
+                    </td>
+
+                    {/* CELDA DEL PERIODO (FECHAS) */}
+                    <td className="p-4">
+                      {doc.periodoFacturacion ? (
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-zinc-600">
+                            {new Date(doc.periodoFacturacion.fechaInicio).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'2-digit'})} - {new Date(doc.periodoFacturacion.fechaFin).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'2-digit'})}
+                          </span>
+                          <span className="text-[9px] font-bold text-amber-600 mt-0.5">
+                            Corte: {new Date(doc.periodoFacturacion.fechaCorte).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'2-digit'})}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-medium text-zinc-400">---</span>
+                      )}
+                    </td>
+
                     <td className="p-4 text-right font-mono font-black text-zinc-900 text-sm">
                       ${doc.totalDocumento?.toLocaleString()}
                     </td>
@@ -186,7 +220,7 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
         </div>
       </div>
 
-      {/* VISOR DE FACTURA COMPACTO (AHORA CON SALDOS EN LOS DETALLES) */}
+      {/* VISOR DE FACTURA COMPACTO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh] border border-zinc-200">
@@ -213,14 +247,27 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
                   </div>
                 </div>
 
-                {/* CUERPO DE CONCEPTOS (ACTUALIZADO CON SALDOS) */}
+                {/* CUERPO DE CONCEPTOS */}
                 <div className="flex-1 p-6 overflow-y-auto">
+                  
+                  {/* CONTEXTO SAAS */}
+                  {docSeleccionado.cicloFacturacion && (
+                    <div className="mb-5 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                       <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-1">Contexto de Facturación</p>
+                       <p className="text-xs font-bold text-indigo-900">{docSeleccionado.cicloFacturacion.nombre}</p>
+                       {docSeleccionado.periodoFacturacion && (
+                         <p className="text-[10px] font-medium text-indigo-700 mt-1">
+                           Periodo: {new Date(docSeleccionado.periodoFacturacion.fechaInicio).toLocaleDateString()} al {new Date(docSeleccionado.periodoFacturacion.fechaFin).toLocaleDateString()}
+                         </p>
+                       )}
+                    </div>
+                  )}
+
                   <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-3">Detalle Operativo</p>
                   <div className="space-y-2">
                     {docSeleccionado.detalles?.map((det: any, i: number) => (
                       <div key={i} className="flex justify-between items-center text-xs p-3 bg-white border border-zinc-200 rounded-xl hover:border-zinc-400 transition-all shadow-sm relative overflow-hidden">
                         
-                        {/* Etiqueta visual si la línea ya fue pagada/cruzada con Notas */}
                         {det.saldo === 0 && (
                           <div className="absolute top-0 right-0 bg-emerald-100 text-emerald-600 text-[8px] font-black px-2 py-0.5 rounded-bl-lg">PAGADO</div>
                         )}
@@ -253,7 +300,6 @@ export default function DocumentosManager({ fixedEmpresaId }: { fixedEmpresaId?:
                     ))}
                   </div>
 
-                  {/* Observaciones (Si las hay) */}
                   {docSeleccionado.observaciones && (
                      <div className="mt-6 pt-4 border-t border-zinc-200 border-dashed">
                         <p className="text-[9px] font-extrabold uppercase text-zinc-400 tracking-widest mb-2">Justificación / Notas</p>
