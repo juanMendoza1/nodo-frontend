@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { useWebSockets } from '../../../hooks/useWebSockets'; // El hook que definimos antes
+import React, { useState } from 'react';
+import { useWebSockets } from '../../../hooks/useWebSockets'; 
 import { LayoutGrid, Info, Clock, Beer, Disc } from 'lucide-react';
+
+// 🔥 Definimos la estructura exacta del evento que llega por STOMP
+interface MonitorEvent {
+    tipo: string;
+    data: Record<string, any>;
+    fecha: number;
+}
 
 interface MesaEstado {
     idMesa: number;
     consumoTotal: number;
     dueloActivo: boolean;
     ultimaActividad: number;
-    items: any[];
+    items: MonitorEvent[]; // 🔥 Reemplazamos any[] por MonitorEvent[]
 }
 
 const LiveTableMonitor = ({ empresaId }: { empresaId: number }) => {
@@ -15,45 +22,50 @@ const LiveTableMonitor = ({ empresaId }: { empresaId: number }) => {
     const [mesas, setMesas] = useState<Record<number, MesaEstado>>({});
     const [mesaSeleccionada, setMesaSeleccionada] = useState<MesaEstado | null>(null);
 
-    const eventoIncoming = useWebSockets(empresaId, 'monitor-operativo');
+    // 🔥 Usamos el nuevo Hook Universal y procesamos directo en el callback
+    useWebSockets(empresaId, [
+        {
+            topic: `/topic/monitor-operativo/${empresaId}`,
+            callback: (eventoIncoming: MonitorEvent) => {
+                const { tipo, data, fecha } = eventoIncoming;
+                const mesaId = data?.idMesa;
 
-    useEffect(() => {
-        if (!eventoIncoming) return;
+                if (!mesaId) return;
 
-        const { tipo, data, fecha } = eventoIncoming;
-        const mesaId = data.idMesa;
+                setMesas(prev => {
+                    const mesaActual = prev[mesaId] || {
+                        idMesa: mesaId,
+                        consumoTotal: 0,
+                        dueloActivo: false,
+                        ultimaActividad: Date.now(),
+                        items: []
+                    };
 
-        if (!mesaId) return;
+                    // Lógica de actualización según el tipo de evento
+                    let nuevoConsumo = mesaActual.consumoTotal;
+                    let duelo = mesaActual.dueloActivo;
 
-        setMesas(prev => {
-            const mesaActual = prev[mesaId] || {
-                idMesa: mesaId,
-                consumoTotal: 0,
-                dueloActivo: false,
-                ultimaActividad: Date.now(),
-                items: []
-            };
+                    if (tipo === 'PEDIDO_DIRECTO') {
+                        // Aseguramos valores por defecto por seguridad matemática
+                        nuevoConsumo += ((data.precio || 0) * (data.cantidad || 1));
+                    }
+                    if (tipo === 'MESA_ABIERTA') duelo = true;
+                    if (tipo === 'DUELO_FINALIZADO_ESTADISTICO') duelo = false;
 
-            // Lógica de actualización según el tipo de evento
-            let nuevoConsumo = mesaActual.consumoTotal;
-            let duelo = mesaActual.dueloActivo;
-
-            if (tipo === 'PEDIDO_DIRECTO') nuevoConsumo += (data.precio * data.cantidad);
-            if (tipo === 'MESA_ABIERTA') duelo = true;
-            if (tipo === 'DUELO_FINALIZADO_ESTADISTICO') duelo = false;
-
-            return {
-                ...prev,
-                [mesaId]: {
-                    ...mesaActual,
-                    consumoTotal: nuevoConsumo,
-                    dueloActivo: duelo,
-                    ultimaActividad: fecha,
-                    items: [eventoIncoming, ...mesaActual.items].slice(0, 20) // Guardamos últimos 20 eventos
-                }
-            };
-        });
-    }, [eventoIncoming]);
+                    return {
+                        ...prev,
+                        [mesaId]: {
+                            ...mesaActual,
+                            consumoTotal: nuevoConsumo,
+                            dueloActivo: duelo,
+                            ultimaActividad: fecha || Date.now(),
+                            items: [eventoIncoming, ...mesaActual.items].slice(0, 20) // Guardamos últimos 20 eventos
+                        }
+                    };
+                });
+            }
+        }
+    ]);
 
     return (
         <div className="p-6">
@@ -91,7 +103,7 @@ const LiveTableMonitor = ({ empresaId }: { empresaId: number }) => {
                 ))}
             </div>
 
-            {/* Modal de Detalle (El Resumen que pediste) */}
+            {/* Modal de Detalle (El Resumen Histórico) */}
             {mesaSeleccionada && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
@@ -102,7 +114,7 @@ const LiveTableMonitor = ({ empresaId }: { empresaId: number }) => {
                             </div>
                             <button 
                                 onClick={() => setMesaSeleccionada(null)}
-                                className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-full"
+                                className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-full transition-colors"
                             >
                                 ✕
                             </button>

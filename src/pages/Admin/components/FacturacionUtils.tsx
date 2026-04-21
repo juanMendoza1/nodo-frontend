@@ -21,19 +21,38 @@ export const confirmarAccion = (titulo: string, mensaje: string, onConfirm: () =
   ), { duration: 8000, position: 'top-center', style: { maxWidth: '400px', padding: '16px', borderRadius: '16px' }});
 };
 
-// --- SELECTOR INTELIGENTE PRO ---
-export const SearchableSelect = ({ value, options, onChange, placeholder, disabled, loading, renderLabel }: any) => {
+export interface SearchableSelectProps<T> {
+  value: string | number;
+  options: T[];
+  onChange: (val: number | string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  loading?: boolean;
+  renderLabel?: (opt: T) => string;
+  labelKey?: keyof T;
+}
+
+export const SearchableSelect = <T extends { id: number | string; nombre?: string; [key: string]: any }>({
+  value,
+  options,
+  onChange,
+  placeholder = "Seleccionar...",
+  disabled = false,
+  loading = false,
+  renderLabel,
+  labelKey = 'nombre'
+}: SearchableSelectProps<T>) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const safeOptions = options || [];
-  const selectedOption = safeOptions.find((opt: any) => String(opt.id) === String(value));
+  const selectedOption = safeOptions.find((opt) => String(opt.id) === String(value));
   
-  const filteredOptions = safeOptions.filter((opt: any) => {
+  const filteredOptions = safeOptions.filter((opt) => {
     const term = searchTerm.toLowerCase();
-    const texto = renderLabel ? renderLabel(opt) : opt.nombre;
+    const texto = renderLabel ? renderLabel(opt) : String(opt[labelKey] || opt.nombre || '');
     const idStr = opt.id ? opt.id.toString() : '';
-    return texto?.toLowerCase().includes(term) || idStr.includes(term);
+    return texto.toLowerCase().includes(term) || idStr.includes(term);
   });
 
   const displayedOptions = filteredOptions.slice(0, 50);

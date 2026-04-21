@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   PackageSearch, Plus, Search, Edit2, Trash2, 
-  X, CheckCircle2, Loader2, Cpu, Code2, PlayCircle, Lock, CheckSquare, Server, AlertTriangle
+  X, CheckCircle2, Loader2, Cpu, Code2, PlayCircle, Lock, CheckSquare, Server, AlertTriangle, Database
 } from 'lucide-react';
 import { programasService, type ProgramaData } from '../../../api/programas.service';
 import api from '../../../api/axios.config';
@@ -11,27 +11,32 @@ export default function ProgramasManager() {
   const [programas, setProgramas] = useState<ProgramaData[]>([]);
   const [permisosDisponibles, setPermisosDisponibles] = useState<any[]>([]);
   const [dominios, setDominios] = useState<any[]>([]); 
+  const [estructuras, setEstructuras] = useState<any[]>([]); // 🔥 NUEVO ESTADO PARA ESTRUCTURAS
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   
+  // 🔥 AÑADIMOS estructurasIds AL ESTADO INICIAL
   const [formData, setFormData] = useState<ProgramaData>({
-    codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined
+    codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined, estructurasIds: []
   });
 
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const [progs, perms, doms] = await Promise.all([
+      // 🔥 AÑADIMOS LA LLAMADA AL API DE ESTRUCTURAS
+      const [progs, perms, doms, ests] = await Promise.all([
         programasService.obtenerTodos(),
         api.get('/api/permisos').then(r => r.data),
-        api.get('/api/dominios-operativos').then(r => r.data)
+        api.get('/api/dominios-operativos').then(r => r.data),
+        api.get('/api/estructuras').then(r => r.data)
       ]);
       setProgramas(progs || []);
       setPermisosDisponibles(perms || []);
       setDominios(doms || []);
+      setEstructuras(ests || []);
     } catch (error) {
       console.error("Error cargando datos:", error);
       toast.error("Error al cargar los catálogos del sistema.");
@@ -50,11 +55,12 @@ export default function ProgramasManager() {
       setFormData({ 
         ...programa, 
         permisosIds: programa.permisosIds || [],
-        dominioId: programa.dominioId 
+        dominioId: programa.dominioId,
+        estructurasIds: programa.estructurasIds || [] // 🔥 CARGAMOS LAS ESTRUCTURAS GUARDADAS
       });
     } else {
       setEditingId(null);
-      setFormData({ codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined });
+      setFormData({ codigo: '', nombre: '', descripcion: '', version: '1.0.0', activo: true, permisosIds: [], dominioId: undefined, estructurasIds: [] });
     }
     setIsDrawerOpen(true);
   };
@@ -64,24 +70,24 @@ export default function ProgramasManager() {
     setEditingId(null);
   };
 
-  // 🔥 MAGIA: Lógica de Dependencias 100% Dinámica (Cero Hardcode)
+  // 🔥 Lógica de Dependencias 100% Dinámica para MÓDULOS
   const togglePermiso = (permisoId: number) => {
     const actuales = new Set(formData.permisosIds || []);
     
     if (actuales.has(permisoId)) {
-      // 🛑 INTENTO DE DESMARCAR: Verificamos si alguien más lo necesita
+      // INTENTO DE DESMARCAR: Verificamos si alguien más lo necesita
       const requeridoPor = permisosDisponibles.find(p => 
         actuales.has(p.id) && p.dependenciasIds?.includes(permisoId)
       );
       
       if (requeridoPor) {
         toast.error(`No puedes quitar este módulo porque "${requeridoPor.codigo.replace('MOD_', '')}" lo requiere.`);
-        return; // Bloqueamos la acción
+        return; 
       }
       
       actuales.delete(permisoId);
     } else {
-      // ✅ INTENTO DE MARCAR: Lo agregamos y auto-marcamos sus dependencias
+      // INTENTO DE MARCAR: Lo agregamos y auto-marcamos sus dependencias
       actuales.add(permisoId);
       
       const permisoSeleccionado = permisosDisponibles.find(p => p.id === permisoId);
@@ -100,6 +106,17 @@ export default function ProgramasManager() {
     }
     
     setFormData({ ...formData, permisosIds: Array.from(actuales) });
+  };
+
+  // 🔥 NUEVO: Función para alternar la selección de Estructuras
+  const toggleEstructura = (estId: number) => {
+    const actuales = new Set(formData.estructurasIds || []);
+    if (actuales.has(estId)) {
+      actuales.delete(estId);
+    } else {
+      actuales.add(estId);
+    }
+    setFormData({ ...formData, estructurasIds: Array.from(actuales) });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -155,7 +172,7 @@ export default function ProgramasManager() {
           <h2 className="text-3xl font-black text-zinc-900 tracking-tight flex items-center gap-3">
             <Cpu className="w-8 h-8 text-black" /> Catálogo de Programas
           </h2>
-          <p className="text-sm text-zinc-500 font-medium mt-1">Arma paquetes SaaS (Legos) agrupando funcionalidades y módulos.</p>
+          <p className="text-sm text-zinc-500 font-medium mt-1">Arma paquetes SaaS (Legos) agrupando funcionalidades, módulos y estructuras de datos.</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-72">
@@ -261,7 +278,7 @@ export default function ProgramasManager() {
               <Cpu className="w-5 h-5 text-black" />
               {editingId ? 'Editar Programa' : 'Nuevo Programa'}
             </h3>
-            <p className="text-xs font-medium text-zinc-500 mt-1">Configura el paquete SaaS y sus módulos.</p>
+            <p className="text-xs font-medium text-zinc-500 mt-1">Configura el paquete SaaS, sus módulos y estructuras.</p>
           </div>
           <button onClick={handleCloseDrawer} className="p-2 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-full transition-colors">
             <X className="w-5 h-5" />
@@ -312,7 +329,7 @@ export default function ProgramasManager() {
               <textarea rows={2} value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium focus:bg-white focus:outline-none focus:border-black resize-none" placeholder="¿Qué funcionalidades incluye este paquete?" />
             </div>
 
-            {/* 🔥 MÓDULOS SAAS CON COMPROBACIÓN DINÁMICA DE DEPENDENCIAS */}
+            {/* 🔥 MÓDULOS SAAS */}
             <div className="space-y-3 pt-4 border-t border-zinc-100">
               <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-zinc-400" /> Módulos SaaS Incluidos
@@ -354,6 +371,37 @@ export default function ProgramasManager() {
                         {isForcedByDependency && (
                           <Lock className="w-3.5 h-3.5 text-zinc-500 shrink-0" title="Requerido por otro módulo activo" />
                         )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 🔥 ESTRUCTURAS DE DATOS REQUERIDAS (NUEVO) */}
+            <div className="space-y-3 pt-4 border-t border-zinc-100">
+              <label className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                <Database className="w-4 h-4 text-zinc-400" /> Estructuras de Datos (Parametrización)
+              </label>
+              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 max-h-56 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-3 shadow-inner">
+                {estructuras.length === 0 ? (
+                  <p className="text-xs text-zinc-400 col-span-2 text-center py-2">No hay estructuras creadas en el sistema.</p>
+                ) : (
+                  estructuras.map(est => {
+                    const isChecked = formData.estructurasIds?.includes(est.id);
+                    return (
+                      <div 
+                        key={est.id} 
+                        onClick={() => toggleEstructura(est.id)}
+                        className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${isChecked ? 'bg-white border-black shadow-sm' : 'border-transparent hover:bg-zinc-100'}`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-black border-black' : 'bg-white border-zinc-300'}`}>
+                          {isChecked && <CheckCircle2 className="w-3 h-3 text-white" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`text-xs font-bold truncate ${isChecked ? 'text-black' : 'text-zinc-600'}`}>{est.nombre}</p>
+                          <p className="text-[9px] text-zinc-400 font-mono">{est.codigo}</p>
+                        </div>
                       </div>
                     )
                   })

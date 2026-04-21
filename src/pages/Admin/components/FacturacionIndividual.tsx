@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { 
-  Calculator, PlayCircle, CheckCircle2, Loader2, Printer, 
+  Calculator, PlayCircle, CheckCircle2, Loader2, 
   ArrowRight, XCircle, Plus, DollarSign, X, Receipt, AlertCircle, Info, Server
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -9,36 +9,88 @@ import { SearchableSelect, confirmarAccion } from './FacturacionUtils';
 import { documentosService } from '../../../api/documentos.service';
 import { ciclosService } from '../../../api/ciclos.service';
 
-export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }: any) {
+// 🔥 Importamos los tipos estrictos
+import type { 
+  SuscripcionFacturacion, 
+  PeriodoFacturacion, 
+  ConceptoFacturacion, 
+  LiquidacionPlantilla, 
+  NovedadFacturacion 
+} from '../../../types/facturacion.types';
+
+// 🔥 Definimos la interfaz estricta de las Props (¡Adiós 'any'!)
+interface FacturacionIndividualProps {
+  data: {
+    initData: {
+      suscripciones: SuscripcionFacturacion[];
+      empresasFull: any[]; // Si tienes el tipo Empresa, puedes cambiarlo
+      ciclos: any[];
+    };
+    plantillasData: {
+      conceptosManuales: ConceptoFacturacion[];
+      liquidaciones: LiquidacionPlantilla[];
+    };
+  };
+  isLoadingUI: boolean;
+  TabSwitcher: React.ReactNode;
+}
+
+// Interfaz para el borrador devuelto por el backend
+interface BorradorFactura {
+  total: number;
+  detalles: {
+    conceptoNombre: string;
+    conceptoCodigo: string;
+    naturaleza: 'S' | 'R' | 'SUMA' | 'RESTA';
+    valorTotal: number;
+  }[];
+}
+
+export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }: FacturacionIndividualProps) {
   const NODO_MASTER_ID = 1;
   const { suscripciones, empresasFull } = data.initData || { suscripciones: [], empresasFull: [] };
   const { conceptosManuales, liquidaciones } = data.plantillasData || { conceptosManuales: [], liquidaciones: [] };
 
   const [filtrosInd, setFiltrosInd] = useState({ suscripcionId: '' });
-  const [novedades, setNovedades] = useState<any[]>([]);
-  const [isNovedadModalOpen, setIsNovedadModalOpen] = useState(false);
-  const [nuevaNovedad, setNuevaNovedad] = useState({ concepto: '', valor: '' });
-  const [borradorInd, setBorradorInd] = useState<any>(null);
-  const [docEmitidoInd, setDocEmitidoInd] = useState<any>(null);
+  
+  // 🔥 Estados fuertemente tipados
+  const [novedades, setNovedades] = useState<NovedadFacturacion[]>([]);
+  const [isNovedadModalOpen, setIsNovedadModalOpen] = useState<boolean>(false);
+  const [nuevaNovedad, setNuevaNovedad] = useState<{ concepto: string; valor: string }>({ concepto: '', valor: '' });
+  const [borradorInd, setBorradorInd] = useState<BorradorFactura | null>(null);
+  const [docEmitidoInd, setDocEmitidoInd] = useState<{ consecutivo: string, total: number } | null>(null);
 
-  const suscripcionSel = useMemo(() => suscripciones.find((s: any) => String(s.id) === String(filtrosInd.suscripcionId)), [suscripciones, filtrosInd.suscripcionId]);
+  // Selector Memoizado
+  const suscripcionSel = useMemo(() => 
+    suscripciones.find((s) => String(s.id) === String(filtrosInd.suscripcionId)), 
+  [suscripciones, filtrosInd.suscripcionId]);
+  
   const cicloIdInd = suscripcionSel?.cicloFacturacion?.id;
   const liquidacionAsignada = suscripcionSel?.liquidacion; 
 
-  const { data: periodosInd = [] } = useQuery({ queryKey: ['periodos_ind', cicloIdInd], queryFn: () => ciclosService.obtenerPeriodos(cicloIdInd!), enabled: !!cicloIdInd });
-  const periodoActivoInd = useMemo(() => periodosInd.find((p: any) => p.estado === 'ABIERTO' || p.estado === 'LIQUIDANDO'), [periodosInd]);
+  const { data: periodosInd = [] } = useQuery<PeriodoFacturacion[]>({ 
+    queryKey: ['periodos_ind', cicloIdInd], 
+    queryFn: () => ciclosService.obtenerPeriodos(cicloIdInd!), 
+    enabled: !!cicloIdInd 
+  });
+  
+  const periodoActivoInd = useMemo(() => 
+    periodosInd.find((p) => p.estado === 'ABIERTO' || p.estado === 'LIQUIDANDO'), 
+  [periodosInd]);
 
+  // Mutaciones
   const mutationPreliqInd = useMutation({
     mutationFn: (payload: any) => documentosService.preliquidar(payload),
-    onSuccess: (data) => setBorradorInd(data),
+    onSuccess: (data: BorradorFactura) => setBorradorInd(data),
     onError: (error: any) => toast.error(error.response?.data?.error || "Error al calcular la proforma.")
   });
 
   const mutationLiqInd = useMutation({
     mutationFn: (payload: any) => documentosService.liquidar(payload),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       setDocEmitidoInd({ consecutivo: data.consecutivo, total: data.total });
-      setBorradorInd(null); setNovedades([]);
+      setBorradorInd(null); 
+      setNovedades([]);
       toast.success("Factura emitida con éxito.", { duration: 4000, icon: '🚀' });
     },
     onError: (error: any) => toast.error(error.response?.data?.error || "Error al sellar el documento")
@@ -53,13 +105,16 @@ export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }
        return;
     }
 
-    const emp = empresasFull.find((e: any) => String(e.id) === String(suscripcionSel.empresa.id));
-    const valoresOperativos: any = { "CANTIDAD_TABLETS": suscripcionSel.dispositivosActivos || 0 };
-    novedades.forEach(n => { valoresOperativos[n.codigo] = n.valor; });
+    const emp = empresasFull.find((e) => String(e.id) === String(suscripcionSel.empresa.id));
+    const valoresOperativos: Record<string, number> = { "CANTIDAD_TABLETS": suscripcionSel.dispositivosActivos || 0 };
+    
+    novedades.forEach(n => { 
+        valoresOperativos[n.codigo] = n.valor; 
+    });
 
-    const matrizCompleta = liquidaciones?.find((l: any) => l.codigo === liquidacionAsignada.codigo);
+    const matrizCompleta = liquidaciones?.find((l) => l.codigo === liquidacionAsignada.codigo);
     const programaIdCorrecto = matrizCompleta?.programa?.id || 0;
-    const tipoDocCorrecto = matrizCompleta?.tipoDocumento?.codigo || "FV";
+    const tipoDocCorrecto = matrizCompleta?.tipoDocumentoGenerado?.codigo || "FV";
 
     mutationPreliqInd.mutate({
       empresaId: NODO_MASTER_ID, 
@@ -70,31 +125,41 @@ export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }
       valoresOperativos, 
       cicloId: cicloIdInd, 
       periodoId: periodoActivoInd.id,
-      suscripcionId: suscripcionSel.id // 🔥 ENVIAMOS LA SUSCRIPCIÓN PARA VALIDAR
+      suscripcionId: suscripcionSel.id
     });
   };
 
-  useEffect(() => { if (borradorInd && !mutationPreliqInd.isPending) handleCalcularInd(); }, [novedades]);
+  useEffect(() => { 
+    if (borradorInd && !mutationPreliqInd.isPending) {
+        handleCalcularInd(); 
+    } 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novedades]);
 
   const handleSellarInd = () => {
+    if(!suscripcionSel || !periodoActivoInd || !borradorInd) return;
+
     confirmarAccion(
       "Emitir Factura Oficial",
       `¿Estás seguro de generar la factura para ${suscripcionSel.empresa.nombreComercial} por $${borradorInd.total?.toLocaleString()}?`,
       () => {
-        const emp = empresasFull.find((e: any) => String(e.id) === String(suscripcionSel.empresa.id));
-        const valoresOperativos: any = { "CANTIDAD_TABLETS": suscripcionSel.dispositivosActivos || 0 };
-        novedades.forEach(n => { valoresOperativos[n.codigo] = n.valor; });
+        const emp = empresasFull.find((e) => String(e.id) === String(suscripcionSel.empresa.id));
+        const valoresOperativos: Record<string, number> = { "CANTIDAD_TABLETS": suscripcionSel.dispositivosActivos || 0 };
+        
+        novedades.forEach(n => { 
+            valoresOperativos[n.codigo] = n.valor; 
+        });
 
-        const matrizCompleta = liquidaciones?.find((l: any) => l.codigo === liquidacionAsignada.codigo);
+        const matrizCompleta = liquidaciones?.find((l) => l.codigo === liquidacionAsignada?.codigo);
         const programaIdCorrecto = matrizCompleta?.programa?.id || 0;
-        const tipoDocCorrecto = matrizCompleta?.tipoDocumento?.codigo || "FV";
+        const tipoDocCorrecto = matrizCompleta?.tipoDocumentoGenerado?.codigo || "FV";
 
         mutationLiqInd.mutate({
           empresaId: NODO_MASTER_ID, 
           programaId: programaIdCorrecto, 
           terceroId: emp.tercero.id, 
           tipoDocumentoCodigo: tipoDocCorrecto,
-          codigoLiquidacion: liquidacionAsignada.codigo,
+          codigoLiquidacion: liquidacionAsignada?.codigo,
           valoresOperativos, 
           cicloId: cicloIdInd, 
           periodoId: periodoActivoInd.id,
@@ -107,14 +172,20 @@ export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }
 
   const agregarNovedad = (e: React.FormEvent) => {
     e.preventDefault();
-    const conceptoSelec = conceptosManuales.find((c: any) => String(c.codigo) === String(nuevaNovedad.concepto));
+    const conceptoSelec = conceptosManuales.find((c) => String(c.codigo) === String(nuevaNovedad.concepto));
     if (!conceptoSelec) return;
     
-    // 🔥 CORRECCIÓN AQUÍ: Evaluamos con el Enum oficial de la BD 'R' o 'S' (Si el concepto no tiene naturaleza, inferimos por nombre)
     const tipoNav = conceptoSelec.naturaleza ? conceptoSelec.naturaleza : (conceptoSelec.nombre.toLowerCase().includes('descuento') ? 'R' : 'S');
     
-    setNovedades([...novedades, { codigo: conceptoSelec.codigo, nombre: conceptoSelec.nombre, valor: Number(nuevaNovedad.valor), tipo: tipoNav }]);
-    setIsNovedadModalOpen(false); setNuevaNovedad({ concepto: '', valor: '' });
+    setNovedades([...novedades, { 
+        codigo: conceptoSelec.codigo, 
+        nombre: conceptoSelec.nombre, 
+        valor: Number(nuevaNovedad.valor), 
+        tipo: tipoNav as 'S' | 'R' 
+    }]);
+    
+    setIsNovedadModalOpen(false); 
+    setNuevaNovedad({ concepto: '', valor: '' });
   };
 
   return (
@@ -133,9 +204,11 @@ export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }
             <div className="space-y-1.5">
               <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500">Suscripción / Cliente *</label>
               <SearchableSelect 
-                value={filtrosInd.suscripcionId} options={suscripciones} 
-                onChange={(val: any) => { setFiltrosInd({ suscripcionId: val }); setBorradorInd(null); }}
-                placeholder="Buscar por nombre o ID..." loading={isLoadingUI}
+                value={filtrosInd.suscripcionId} 
+                options={suscripciones} 
+                onChange={(val: any) => { setFiltrosInd({ suscripcionId: String(val) }); setBorradorInd(null); }}
+                placeholder="Buscar por nombre o ID..." 
+                loading={isLoadingUI}
                 renderLabel={(opt: any) => `${opt.empresa?.nombreComercial} - ${opt.programa?.nombre}`}
               />
               {filtrosInd.suscripcionId && !periodoActivoInd && (
@@ -211,13 +284,12 @@ export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }
                 </div>
                 
                 <div className="space-y-3 mt-4">
-                  {borradorInd.detalles?.map((det: any, i: number) => (
+                  {borradorInd.detalles?.map((det, i: number) => (
                     <div key={i} className="flex justify-between items-center text-sm p-2 hover:bg-zinc-50 rounded-lg transition-colors group">
                       <div className="flex items-center gap-2"><p className="font-bold text-zinc-800">{det.conceptoNombre}</p></div>
                       <div className="flex items-center gap-3">
-                        {/* 🔥 CORRECCIÓN AQUÍ: Evaluación S o R */}
-                        <span className={`font-mono font-black ${det.naturaleza === 'S' ? 'text-zinc-900' : 'text-red-600'}`}>
-                          {det.naturaleza === 'R' ? '-' : ''} ${det.valorTotal?.toLocaleString()}
+                        <span className={`font-mono font-black ${det.naturaleza === 'S' || det.naturaleza === 'SUMA' ? 'text-zinc-900' : 'text-red-600'}`}>
+                          {det.naturaleza === 'R' || det.naturaleza === 'RESTA' ? '-' : ''} ${det.valorTotal?.toLocaleString()}
                         </span>
                         {novedades.find(n => n.codigo === det.conceptoCodigo) && (
                           <button onClick={() => setNovedades(novedades.filter(n => n.codigo !== det.conceptoCodigo))} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"><XCircle className="w-4 h-4" /></button>
@@ -271,7 +343,7 @@ export default function FacturacionIndividual({ data, isLoadingUI, TabSwitcher }
                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 mb-1.5 block">Concepto *</label>
                  <select required value={nuevaNovedad.concepto} onChange={e => setNuevaNovedad({...nuevaNovedad, concepto: e.target.value})} className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:bg-white focus:border-black outline-none">
                    <option value="">Seleccionar...</option>
-                   {conceptosManuales.map((c: any) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
+                   {conceptosManuales.map((c) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
                  </select>
                </div>
                <div>

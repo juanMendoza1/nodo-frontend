@@ -1,52 +1,69 @@
-import { useEffect, useState } from 'react';
-import SockJS from 'sockjs-client';
+// src/hooks/useWebSockets.ts
+import { useEffect, useRef, useState } from 'react';
 import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+import { API_URL } from '../api/axios.config'; 
 
-export const useWebSockets = (empresaId: number | undefined, topic: string) => {
-    const [lastMessage, setLastMessage] = useState<any>(null);
+export interface WsSubscription {
+  topic: string;
+  callback: (data: any) => void;
+}
 
-    useEffect(() => {
-        if (!empresaId) return;
+export const useWebSockets = (empresaId: number | undefined, subscriptions: WsSubscription[]) => {
+  const [isLive, setIsLive] = useState(false);
+  
+  // Usamos una referencia para evitar que React cierre y abra 
+  // el socket en cada render si las funciones callback cambian.
+  const subsRef = useRef(subscriptions);
 
-        // Configuración del cliente STOMP moderno
-        const client = new Client({
-            brokerURL: 'ws://localhost:8080/ws', // URL para WebSockets puros
-            connectHeaders: {},
-            debug: (str) => {
-                // console.log(str); // Descomenta para ver logs de conexión
-            },
-            reconnectDelay: 5000, // Reintento automático cada 5 seg
-            heartbeatIncoming: 4000,
-            heartbeatOutgoing: 4000,
-        });
+  useEffect(() => {
+    subsRef.current = subscriptions;
+  }, [subscriptions]);
 
-        // Compatibilidad con SockJS si el servidor no soporta WS puros
-        client.webSocketFactory = () => {
-            return new SockJS('http://localhost:8080/ws');
-        };
+  useEffect(() => {
+    if (!empresaId || subsRef.current.length === 0) return;
 
-        client.onConnect = () => {
-            const subscriptionTopic = `/topic/${topic}/${empresaId}`;
-            client.subscribe(subscriptionTopic, (payload) => {
-                if (payload.body) {
-                    setLastMessage(JSON.parse(payload.body));
-                }
-            });
-        };
+    const socketUrl = `${API_URL}/ws`;
 
-        client.onStompError = (frame) => {
-            console.error('Broker reported error: ' + frame.headers['message']);
-            console.error('Additional details: ' + frame.body);
-        };
-
-        client.activate();
-
-        return () => {
-            if (client.active) {
-                client.deactivate();
+    const client = new Client({
+      webSocketFactory: () => new SockJS(socketUrl),
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
+      onConnect: () => {
+        setIsLive(true);
+        console.log(`📡 WebSocket STOMP Conectado - Empresa: ${empresaId}`);
+        
+        // Iteramos dinámicamente sobre todas las suscripciones pasadas
+        subsRef.current.forEach(({ topic, callback }) => {
+          client.subscribe(topic, (message) => {
+            if (message.body) {
+              try {
+                // Intenta convertir a JSON (Ej: objeto Mesa)
+                const parsed = JSON.parse(message.body);
+                callback(parsed);
+              } catch (e) {
+                // Si falla, asume texto plano (Ej: "NUEVA_VENTA")
+                callback(message.body);
+              }
             }
-        };
-    }, [empresaId, topic]);
+          });
+        });
+      },
+      onDisconnect: () => setIsLive(false),
+      onWebSocketError: () => setIsLive(false),
+      onStompError: (frame) => {
+        console.error('STOMP Error:', frame);
+        setIsLive(false);
+      }
+    });
 
-    return lastMessage;
+    client.activate();
+
+    return () => {
+      client.deactivate();
+    };
+  }, [empresaId]);
+
+  return isLive; // Retorna true si está conectado, false si está offline
 };

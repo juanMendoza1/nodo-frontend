@@ -1,36 +1,53 @@
+// src/pages/Admin/views/LiquidacionesMaster.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   Calculator, Plus, Search, Layers, ChevronRight, X, 
   CheckCircle2, Loader2, ArrowUp, ArrowDown, 
   Settings2, Activity, Trash2, Globe, FileText
 } from 'lucide-react';
-import { programasService } from '../../../api/programas.service';
+
+// Servicios
+import { programasService, type ProgramaData } from '../../../api/programas.service';
 import { liquidacionesService } from '../../../api/liquidaciones.service';
 import { conceptosService } from '../../../api/conceptos.service';
-import { configuracionService } from '../../../api/configuracion.service'; 
 import { tiposDocumentosService } from '../../../api/tiposDocumentos.service';
 import toast from 'react-hot-toast';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 
+// 🔥 Importamos las interfaces fuertemente tipadas
+import type { 
+  ConceptoFacturacion, 
+  LiquidacionPlantilla, 
+  ConceptoRelacionadoItem, 
+  TipoDocumento 
+} from '../../../types/facturacion.types';
+
 export default function LiquidacionesMaster() {
-  const [programas, setProgramas] = useState<any[]>([]);
-  const [tiposDocumentos, setTiposDocumentos] = useState<any[]>([]); // 🔥 Para el nuevo selector
+  // --- Estados de Catálogos ---
+  const [programas, setProgramas] = useState<ProgramaData[]>([]);
+  const [tiposDocumentos, setTiposDocumentos] = useState<TipoDocumento[]>([]); 
   const [programaSeleccionado, setProgramaSeleccionado] = useState<number | null>(0); 
   
-  const [liquidaciones, setLiquidaciones] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  // --- Estados de Liquidaciones ---
+  const [liquidaciones, setLiquidaciones] = useState<LiquidacionPlantilla[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const [isPlantillaModalOpen, setIsPlantillaModalOpen] = useState(false);
-  // 🔥 Ajustado para incluir tipoDocumentoId
-  const [nuevaLiquidacion, setNuevaLiquidacion] = useState({ codigo: '', nombre: '', tipoDocumentoId: '' });
+  // --- Modal de Creación de Plantilla ---
+  const [isPlantillaModalOpen, setIsPlantillaModalOpen] = useState<boolean>(false);
+  const [nuevaLiquidacion, setNuevaLiquidacion] = useState<{codigo: string; nombre: string; tipoDocumentoId: string}>({ 
+    codigo: '', nombre: '', tipoDocumentoId: '' 
+  });
 
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
-  const [liquidacionActiva, setLiquidacionActiva] = useState<any>(null);
-  const [conceptosDisponibles, setConceptosDisponibles] = useState<any[]>([]);
-  const [conceptosRelacionados, setConceptosRelacionados] = useState<any[]>([]);
-  const [searchConcepto, setSearchConcepto] = useState('');
+  // --- Modal (Drawer) de Construcción de Receta ---
+  const [isBuilderOpen, setIsBuilderOpen] = useState<boolean>(false);
+  const [liquidacionActiva, setLiquidacionActiva] = useState<LiquidacionPlantilla | null>(null);
+  const [conceptosDisponibles, setConceptosDisponibles] = useState<ConceptoFacturacion[]>([]);
+  const [conceptosRelacionados, setConceptosRelacionados] = useState<ConceptoRelacionadoItem[]>([]);
+  const [searchConcepto, setSearchConcepto] = useState<string>('');
 
-  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, id: 0, nombre: '' });
+  const [confirmDialog, setConfirmDialog] = useState<{isOpen: boolean; id: number; nombre: string}>({ 
+    isOpen: false, id: 0, nombre: '' 
+  });
 
   const EMPRESA_MASTER_ID = 1; 
 
@@ -40,21 +57,23 @@ export default function LiquidacionesMaster() {
       programasService.obtenerTodos(),
       tiposDocumentosService.obtenerTodos()
     ]).then(([dataProg, dataDocs]) => {
-      setProgramas(dataProg || []);
-      setTiposDocumentos(dataDocs || []);
+      setProgramas(dataProg as ProgramaData[] || []);
+      setTiposDocumentos(dataDocs as TipoDocumento[] || []);
       cargarLiquidaciones(0);
     });
   }, []);
 
   useEffect(() => {
-    if (programaSeleccionado !== null) cargarLiquidaciones(programaSeleccionado);
+    if (programaSeleccionado !== null) {
+      cargarLiquidaciones(programaSeleccionado);
+    }
   }, [programaSeleccionado]);
 
   const cargarLiquidaciones = async (progId: number) => {
     setLoading(true);
     try {
       const res = await liquidacionesService.obtenerPlantillasPorPrograma(progId);
-      setLiquidaciones(res || []);
+      setLiquidaciones(res as LiquidacionPlantilla[] || []);
     } catch (e) {
       toast.error("Error cargando liquidaciones.");
     } finally {
@@ -65,7 +84,6 @@ export default function LiquidacionesMaster() {
   const handleCrearLiquidacion = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // 🔥 Validación de seguridad
     if (!nuevaLiquidacion.tipoDocumentoId) {
       toast.error("Debe seleccionar un tipo de documento");
       return;
@@ -84,7 +102,7 @@ export default function LiquidacionesMaster() {
         cargarLiquidaciones(programaSeleccionado!);
         return 'Esquema creado con éxito';
       },
-      error: (err) => err.response?.data?.error || 'Error al crear'
+      error: (err: any) => err.response?.data?.error || 'Error al crear'
     });
   };
 
@@ -96,14 +114,14 @@ export default function LiquidacionesMaster() {
           setConfirmDialog({ isOpen: false, id: 0, nombre: '' });
           return 'Esquema eliminado correctamente';
         },
-        error: (err) => {
+        error: (err: any) => {
           setConfirmDialog({ isOpen: false, id: 0, nombre: '' });
           return err.response?.data?.error || 'No se puede eliminar porque está en uso.';
         }
     });
   };
 
-  const abrirRelacionador = async (liquidacion: any) => {
+  const abrirRelacionador = async (liquidacion: LiquidacionPlantilla) => {
     setLiquidacionActiva(liquidacion);
     setIsBuilderOpen(true);
     setSearchConcepto('');
@@ -112,21 +130,21 @@ export default function LiquidacionesMaster() {
       const disponibles = await conceptosService.obtenerDisponibles(EMPRESA_MASTER_ID, programaSeleccionado!);
       const configuracion = await liquidacionesService.obtenerRecetaActual(EMPRESA_MASTER_ID, liquidacion.codigo, programaSeleccionado!);
       
-      const relacionadosMapeados = configuracion.map((c: any) => ({
+      const relacionadosMapeados: ConceptoRelacionadoItem[] = configuracion.map((c: any) => ({
         conceptoId: c.concepto.id,
         conceptoNombre: c.concepto.nombre,
         codigo: c.concepto.codigo,
         ordenCalculo: c.ordenCalculo
-      })).sort((a:any, b:any) => a.ordenCalculo - b.ordenCalculo);
+      })).sort((a: ConceptoRelacionadoItem, b: ConceptoRelacionadoItem) => a.ordenCalculo - b.ordenCalculo);
 
-      setConceptosDisponibles(disponibles);
+      setConceptosDisponibles(disponibles as ConceptoFacturacion[]);
       setConceptosRelacionados(relacionadosMapeados);
     } catch (e) {
       toast.error("Error al cargar los conceptos relacionados");
     }
   };
 
-  const agregarConcepto = (concepto: any) => {
+  const agregarConcepto = (concepto: ConceptoFacturacion) => {
     if (conceptosRelacionados.find(r => r.conceptoId === concepto.id)) return;
     setConceptosRelacionados([...conceptosRelacionados, {
       conceptoId: concepto.id,
@@ -152,6 +170,8 @@ export default function LiquidacionesMaster() {
   };
 
   const guardarRelacion = async () => {
+    if (!liquidacionActiva) return;
+
     const payload = {
       codigo: liquidacionActiva.codigo,
       programaId: programaSeleccionado === 0 ? null : programaSeleccionado,
@@ -164,7 +184,7 @@ export default function LiquidacionesMaster() {
         setIsBuilderOpen(false);
         return 'Conceptos ensamblados correctamente';
       },
-      error: (err) => err.response?.data?.error || "Error al guardar"
+      error: (err: any) => err.response?.data?.error || "Error al guardar"
     });
   };
 
@@ -204,7 +224,7 @@ export default function LiquidacionesMaster() {
             {programas.map(prog => (
               <button
                 key={prog.id}
-                onClick={() => setProgramaSeleccionado(prog.id)}
+                onClick={() => setProgramaSeleccionado(prog.id!)}
                 className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all ${programaSeleccionado === prog.id ? 'bg-black text-white shadow-md' : 'text-zinc-600 hover:bg-zinc-100 border border-transparent'}`}
               >
                 {prog.nombre}
@@ -238,7 +258,6 @@ export default function LiquidacionesMaster() {
                         <h4 className="text-base font-black text-zinc-900 leading-tight">{liq.nombre}</h4>
                         <div className="flex gap-2 mt-2">
                           <span className="bg-zinc-100 text-zinc-500 px-2 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest">{liq.codigo}</span>
-                          {/* 🔥 Muestra el tipo de documento asociado */}
                           <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1">
                             <FileText className="w-3 h-3" /> {liq.tipoDocumentoGenerado?.codigo || 'N/A'}
                           </span>
@@ -276,7 +295,6 @@ export default function LiquidacionesMaster() {
                  <input required value={nuevaLiquidacion.nombre} onChange={e => setNuevaLiquidacion({...nuevaLiquidacion, nombre: e.target.value})} className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-bold focus:bg-white focus:border-black outline-none transition-all" placeholder="Ej. Facturación Licencia SaaS" />
                </div>
                
-               {/* 🔥 NUEVO SELECTOR DE TIPO DE DOCUMENTO */}
                <div>
                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 mb-1.5 block">Documento Contable a Generar *</label>
                  <select 
@@ -287,7 +305,7 @@ export default function LiquidacionesMaster() {
                  >
                    <option value="">Seleccionar Tipo...</option>
                    {tiposDocumentos.map(td => (
-                     <option key={td.id} value={td.id}>{td.nombre} ({td.codigo})</option>
+                     <option key={td.id} value={td.id.toString()}>{td.nombre} ({td.codigo})</option>
                    ))}
                  </select>
                </div>
@@ -301,8 +319,7 @@ export default function LiquidacionesMaster() {
         </div>
       )}
 
-      {/* DRAWER 2: RELACIONAR CONCEPTOS (EL RESTO SE MANTIENE IGUAL) */}
-      {/* ... (Tu código de Drawer que ya tienes funciona bien) ... */}
+      {/* DRAWER 2: RELACIONAR CONCEPTOS */}
       {isBuilderOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity" onClick={() => setIsBuilderOpen(false)}></div>}
       <div className={`fixed top-0 right-0 h-full w-full max-w-3xl bg-white shadow-2xl z-50 transform transition-transform duration-300 flex flex-col ${isBuilderOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="flex items-center justify-between p-5 border-b border-zinc-100 bg-zinc-50/50 shrink-0">

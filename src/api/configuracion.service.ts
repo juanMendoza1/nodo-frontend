@@ -20,5 +20,14 @@ export const configuracionService = {
   eliminar: async (entidad: string, id: number) => {
     const response = await api.delete(`/api/${entidad}/${id}`);
     return response.data;
+  },
+  obtenerEstructurasPermitidas: async (empresaId: number) => {
+    try {
+      const response = await api.get(`/api/estructuras/empresa/${empresaId}/permitidas`);
+      return response.data;
+    } catch (error) {
+      console.error("Error obteniendo estructuras permitidas:", error);
+      return [];
+    }
   }
 };

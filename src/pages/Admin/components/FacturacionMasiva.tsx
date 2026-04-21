@@ -1,31 +1,76 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { 
-  Zap, Layers, CheckCircle2, Loader2, Users, CalendarDays, Server, AlertCircle, PlayCircle
+  Zap, Layers, CheckCircle2, Loader2, Users, CalendarDays, Server, PlayCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SearchableSelect, confirmarAccion } from './FacturacionUtils';
 import { documentosService } from '../../../api/documentos.service';
 import { ciclosService } from '../../../api/ciclos.service';
 
-export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: any) {
+// 🔥 Importamos los tipos estrictos
+import type { 
+  SuscripcionFacturacion, 
+  PeriodoFacturacion,
+  CicloFacturacion 
+} from '../../../types/facturacion.types';
+
+// 🔥 1. Tipamos las Props del componente
+interface FacturacionMasivaProps {
+  data: {
+    initData: {
+      suscripciones: SuscripcionFacturacion[];
+      ciclos: CicloFacturacion[];
+    };
+  };
+  isLoadingUI: boolean;
+  TabSwitcher: React.ReactNode;
+}
+
+// 🔥 2. Tipamos la respuesta exacta que envía el Backend al procesar un Lote
+interface DetalleFacturaLote {
+  consecutivo: string;
+  cliente: string;
+  nit: string;
+  suscripcion: string;
+  total: number;
+}
+
+interface ResultadoLote {
+  facturasGeneradas: number;
+  facturasOmitidas: number;
+  totalFacturado: number;
+  detalleFacturas: DetalleFacturaLote[];
+  mensaje: string;
+}
+
+export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: FacturacionMasivaProps) {
   const NODO_MASTER_ID = 1;
   const { suscripciones, ciclos } = data.initData || { suscripciones: [], ciclos: [] };
 
   const [filtrosMasivo, setFiltrosMasivo] = useState({ cicloId: '' });
-  const [resultadoMasivo, setResultadoMasivo] = useState<any>(null);
+  
+  // 🔥 3. Reemplazamos any por nuestra nueva interfaz ResultadoLote
+  const [resultadoMasivo, setResultadoMasivo] = useState<ResultadoLote | null>(null);
   const [loteAprobado, setLoteAprobado] = useState(false);
 
-  const { data: periodosMasivo = [] } = useQuery({ queryKey: ['periodos_masivo', filtrosMasivo.cicloId], queryFn: () => ciclosService.obtenerPeriodos(Number(filtrosMasivo.cicloId)), enabled: !!filtrosMasivo.cicloId });
-  const periodoActivoMasivo = useMemo(() => periodosMasivo.find((p: any) => p.estado === 'ABIERTO' || p.estado === 'LIQUIDANDO'), [periodosMasivo]);
+  const { data: periodosMasivo = [] } = useQuery<PeriodoFacturacion[]>({ 
+    queryKey: ['periodos_masivo', filtrosMasivo.cicloId], 
+    queryFn: () => ciclosService.obtenerPeriodos(Number(filtrosMasivo.cicloId)), 
+    enabled: !!filtrosMasivo.cicloId 
+  });
+  
+  const periodoActivoMasivo = useMemo(() => 
+    periodosMasivo.find((p) => p.estado === 'ABIERTO' || p.estado === 'LIQUIDANDO'), 
+  [periodosMasivo]);
   
   const clientesAptosParaLote = useMemo(() => 
-    suscripciones.filter((s: any) => String(s.cicloFacturacion?.id) === String(filtrosMasivo.cicloId) && s.liquidacion != null).length, 
+    suscripciones.filter((s) => String(s.cicloFacturacion?.id) === String(filtrosMasivo.cicloId) && s.liquidacion != null).length, 
   [suscripciones, filtrosMasivo.cicloId]);
 
   const mutationLiqMasivo = useMutation({
     mutationFn: (payload: any) => documentosService.liquidarLote(payload),
-    onSuccess: (data) => {
+    onSuccess: (data: ResultadoLote) => {
       setResultadoMasivo(data);
       setLoteAprobado(false);
       toast.success("Lote pre-liquidado correctamente.", { duration: 5000, icon: '⏳' });
@@ -34,7 +79,7 @@ export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: an
   });
 
   const mutationAprobarLote = useMutation({
-    mutationFn: () => documentosService.aprobarLote(Number(filtrosMasivo.cicloId), periodoActivoMasivo.id),
+    mutationFn: () => documentosService.aprobarLote(Number(filtrosMasivo.cicloId), periodoActivoMasivo!.id),
     onSuccess: () => {
       setLoteAprobado(true);
       toast.success("¡Facturas Oficializadas y Activas!", { duration: 5000, icon: '🎉' });
@@ -50,7 +95,7 @@ export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: an
         mutationLiqMasivo.mutate({
           empresaId: NODO_MASTER_ID, 
           cicloId: Number(filtrosMasivo.cicloId),
-          periodoId: periodoActivoMasivo.id
+          periodoId: periodoActivoMasivo?.id
         });
       }
     );
@@ -80,9 +125,12 @@ export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: an
             <div className="space-y-1.5">
               <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500">Ciclo de Facturación *</label>
               <SearchableSelect 
-                value={filtrosMasivo.cicloId} options={ciclos} 
-                onChange={(val: any) => { setFiltrosMasivo({ cicloId: val }); setResultadoMasivo(null); }}
-                placeholder="Seleccione el molde (Ej: Mensual)..." loading={isLoadingUI} disabled={!!resultadoMasivo}
+                value={filtrosMasivo.cicloId} 
+                options={ciclos} 
+                onChange={(val: string | number) => { setFiltrosMasivo({ cicloId: String(val) }); setResultadoMasivo(null); }}
+                placeholder="Seleccione el molde (Ej: Mensual)..." 
+                loading={isLoadingUI} 
+                disabled={!!resultadoMasivo}
               />
             </div>
 
@@ -120,7 +168,7 @@ export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: an
         ) : (
           <div className="h-full flex flex-col p-4 sm:p-6 animate-in zoom-in duration-500 bg-zinc-50">
             
-            {/* 🔥 BANNER SUPERIOR COMPACTO */}
+            {/* BANNER SUPERIOR COMPACTO */}
             <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 shrink-0 bg-white p-4 rounded-xl border ${loteAprobado ? 'border-emerald-200 shadow-emerald-100' : 'border-amber-200 shadow-amber-100'} shadow-sm`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0 ${loteAprobado ? 'bg-emerald-500' : 'bg-amber-500'}`}>
@@ -146,7 +194,7 @@ export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: an
               )}
             </div>
 
-            {/* 🔥 TARJETAS DE MÉTRICAS COMPACTAS (A 2 COLUMNAS) */}
+            {/* TARJETAS DE MÉTRICAS COMPACTAS */}
             <div className="grid grid-cols-2 gap-3 mb-4 shrink-0 max-w-lg">
               <div className="bg-white border border-zinc-200 rounded-xl p-3 text-center shadow-sm">
                 <p className="text-[10px] font-extrabold uppercase text-zinc-400 mb-0.5">Pre-Liquidadas</p>
@@ -158,7 +206,7 @@ export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: an
               </div>
             </div>
 
-            {/* 🔥 TABLA PROTAGONISTA CON COLUMNA DE SUSCRIPCIÓN */}
+            {/* TABLA PROTAGONISTA CON COLUMNA DE SUSCRIPCIÓN */}
             <div className="bg-white border border-zinc-200 rounded-xl shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden relative">
                {!loteAprobado && (
                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.03] z-0">
@@ -182,7 +230,7 @@ export default function FacturacionMasiva({ data, isLoadingUI, TabSwitcher }: an
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-zinc-50">
-                     {resultadoMasivo.detalleFacturas?.map((fac: any, i: number) => (
+                     {resultadoMasivo.detalleFacturas?.map((fac, i: number) => (
                        <tr key={i} className="hover:bg-zinc-50/50 transition-colors group">
                          <td className="p-3 pl-4 font-mono font-black text-xs text-zinc-900">{fac.consecutivo}</td>
                          <td className="p-3">

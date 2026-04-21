@@ -1,6 +1,7 @@
+// src/api/axios.config.ts
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8080'; 
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'; 
 
 const api = axios.create({
   baseURL: API_URL,
@@ -9,14 +10,11 @@ const api = axios.create({
   },
 });
 
-// Interceptor: Antes de que salga la petición, le pegamos el Token JWT si existe
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     
-    // 💡 LA MAGIA ESTÁ AQUÍ: 
-    // Solo agregamos el token si existe Y la ruta NO es la de login
-    if (token && !config.url.includes('/auth/login')) {
+    if (token && !config.url?.includes('/auth/login')) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     

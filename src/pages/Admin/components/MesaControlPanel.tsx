@@ -4,7 +4,7 @@ import {
   ShoppingCart, Zap, RefreshCw, Store, Users, 
   UserCircle2, MoreVertical, Swords
 } from 'lucide-react';
-import type { MesaDTO } from '../CompanyDashboard';
+import type { MesaDTO } from '../../../types/mesas.types';
 import api from '../../../api/axios.config'; 
 
 interface MesaControlPanelProps {

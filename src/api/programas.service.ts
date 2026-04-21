@@ -10,6 +10,8 @@ export interface ProgramaData {
   dominioOperativo?: string;
   permisosIds?: number[]; 
   permisosCodigos?: string[];
+  estructurasIds?: number[];
+  estructurasCodigos?: string[];
 }
 
 export const programasService = {
