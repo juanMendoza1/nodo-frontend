@@ -1,7 +1,5 @@
-// Archivo: src/api/auth.service.ts
-
 import api from './axios.config';
-import type { LoginResponse } from '../types/auth.types'; // <-- Esta es la línea clave
+import type { LoginResponse } from '../types/auth.types'; 
 
 export const authService = {
   login: async (username: string, password: string): Promise<LoginResponse> => {
@@ -9,6 +7,11 @@ export const authService = {
       username,
       password,
     });
+    return response.data;
+  },
+  
+  switchContext: async (empresaId: number): Promise<LoginResponse> => {
+    const response = await api.post<LoginResponse>(`/auth/switch-context/${empresaId}`);
     return response.data;
   },
 

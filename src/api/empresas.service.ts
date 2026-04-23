@@ -32,9 +32,14 @@ export const deleteEmpresa = async (id: number) => {
   return response.data;
 };
 
-// 4. (Opcional) Objeto consolidado por si en el nuevo componente prefieres usar empresasService.xxx
+export const getEmpresasPorPropietario = async (terceroId: number) => {
+  const response = await axiosInstance.get(`/api/empresas/propietario/${terceroId}`);
+  return response.data;
+};
+
 export const empresasService = {
   obtenerTodas: getEmpresas,
+  obtenerPorPropietario: getEmpresasPorPropietario,
   crear: createEmpresa,
   actualizar: updateEmpresa,
   eliminar: deleteEmpresa
